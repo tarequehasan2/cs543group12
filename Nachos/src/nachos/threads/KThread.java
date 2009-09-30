@@ -49,7 +49,7 @@ public class KThread {
 	else {
 	    readyQueue = ThreadedKernel.scheduler.newThreadQueue(false);
 	    readyQueue.acquire(this);	    
-
+	    
 	    currentThread = this;
 	    tcb = TCB.currentTCB();
 	    name = "main";
@@ -57,6 +57,10 @@ public class KThread {
 
 	    createIdleThread();
 	}
+	
+	// jnz - Per the comments of newThreadQueue, should be created with true for holding join threads.
+	//       Priority donation will be needed later for priority scheduler.
+	joinQueue = ThreadedKernel.scheduler.newThreadQueue(true);
     }
 
     /**
@@ -194,6 +198,12 @@ public class KThread {
 
 	currentThread.status = statusFinished;
 	
+	// jnz - since this thread is finished, we need to see if anyone called join and add to the schedulers ready queue. 
+	KThread thread = currentThread.joinQueue.nextThread();
+	if (thread != null){
+		thread.ready();
+	}
+	
 	sleep();
     }
 
@@ -276,7 +286,14 @@ public class KThread {
 	Lib.debug(dbgThread, "Joining to thread: " + toString());
 
 	Lib.assertTrue(this != currentThread);
-
+		if (this.status == statusFinished){
+			return;
+		}else{
+			boolean intStatus = Machine.interrupt().disable();
+			joinQueue.waitForAccess(currentThread);
+			sleep();
+			Machine.interrupt().restore(intStatus);
+		}
     }
 
     /**
@@ -382,9 +399,9 @@ public class KThread {
     }
 
     private static class PingTest implements Runnable {
-	PingTest(int which) {
-	    this.which = which;
-	}
+    PingTest(int which) {
+    	    this.which = which;
+    	}
 	
 	public void run() {
 	    for (int i=0; i<5; i++) {
@@ -397,14 +414,48 @@ public class KThread {
 	private int which;
     }
 
+    private static class JoinTest implements Runnable {
+    	JoinTest(int which) {
+    	    this.which = which;
+    	    this.thread = null;
+    	}
+
+    	JoinTest(int which, KThread thread) {
+    	    this.which = which;
+    	    this.thread = thread;
+    	}
+    	
+    	public void run() {
+    		if (this.thread != null){
+    			this.thread.join();
+    		}
+    	    for (int i=0; i<5; i++) {
+    		System.out.println("*** thread " + which + " looped "
+    				   + i + " times  --   JoinTest");
+    		currentThread.yield();
+    	    }
+    	}
+
+    	private int which;
+    	private KThread thread;
+        }
+
+    
     /**
      * Tests whether this module is working.
      */
     public static void selfTest() {
 	Lib.debug(dbgThread, "Enter KThread.selfTest");
 	
-	new KThread(new PingTest(1)).setName("forked thread").fork();
-	new PingTest(0).run();
+//	new KThread(new PingTest(1)).setName("forked thread").fork();
+	KThread thread = new KThread(new JoinTest(10));
+	new KThread(new JoinTest(0,thread)).fork();
+	for (int i=1; i<10; i++){
+		new KThread(new JoinTest(i)).fork();
+	}
+	thread.fork();
+	
+//	new PingTest(0).run();
     }
 
     private static final char dbgThread = 't';
@@ -440,6 +491,8 @@ public class KThread {
     /** Number of times the KThread constructor was called. */
     private static int numCreated = 0;
 
+    // jnz - added a new threadQueue to hold the threads that call join on this thread.
+    private ThreadQueue joinQueue = null;
     private static ThreadQueue readyQueue = null;
     private static KThread currentThread = null;
     private static KThread toBeDestroyed = null;
