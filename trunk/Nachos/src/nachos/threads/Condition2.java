@@ -31,11 +31,18 @@ public class Condition2 {
      * automatically reacquire the lock before <tt>sleep()</tt> returns.
      */
     public void sleep() {
-	Lib.assertTrue(conditionLock.isHeldByCurrentThread());
-
-	conditionLock.release();
-
-	conditionLock.acquire();
+    	Lib.assertTrue(conditionLock.isHeldByCurrentThread());
+	
+    	conditionLock.release();
+	
+    	boolean intStatus = Machine.interrupt().disable();
+    	queue.waitForAccess(KThread.currentThread());
+    	KThread.sleep();
+    	Machine.interrupt().restore(intStatus);
+	
+	
+    	conditionLock.acquire();
+	
     }
 
     /**
@@ -43,7 +50,16 @@ public class Condition2 {
      * current thread must hold the associated lock.
      */
     public void wake() {
-	Lib.assertTrue(conditionLock.isHeldByCurrentThread());
+    	Lib.assertTrue(conditionLock.isHeldByCurrentThread());
+	
+    	boolean intStatus = Machine.interrupt().disable();
+    	KThread thread = queue.nextThread();
+    	if (thread != null){
+    		thread.ready();
+    	}
+    	Machine.interrupt().restore(intStatus);
+	
+	
     }
 
     /**
@@ -51,8 +67,15 @@ public class Condition2 {
      * thread must hold the associated lock.
      */
     public void wakeAll() {
-	Lib.assertTrue(conditionLock.isHeldByCurrentThread());
-    }
+    	Lib.assertTrue(conditionLock.isHeldByCurrentThread());
+    	boolean intStatus = Machine.interrupt().disable();
+    	for (KThread thread = queue.nextThread(); thread != null ;){
+    		thread.ready();	
+    	}
+    	Machine.interrupt().restore(intStatus);
 
-    private Lock conditionLock;
+    }
+    
+    private ThreadQueue queue = ThreadedKernel.scheduler.newThreadQueue(true);
+    Lock conditionLock;
 }
