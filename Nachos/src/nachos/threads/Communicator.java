@@ -27,6 +27,17 @@ public class Communicator {
      * @param	word	the integer to transfer.
      */
     public void speak(int word) {
+    	lock.acquire();
+    	while (spoken){
+    		speakers++;
+    		conditionSpeak.sleep();  // if a word was already spoken, wait here until ready to be heard.
+    		speakers--;
+    	}
+    	this.word = word;      
+    	spoken=true;              // spoken token  
+    	conditionListen.wake();  // Wake a listener, if there is one.
+    	conditionWait.sleep();   // Wait for a listener to wake the thread.
+    	lock.release();
     }
 
     /**
@@ -34,8 +45,28 @@ public class Communicator {
      * the <i>word</i> that thread passed to <tt>speak()</tt>.
      *
      * @return	the integer transferred.
-     */    
+     */   
     public int listen() {
-	return 0;
+    	lock.acquire();
+    	
+    	while (!spoken){
+    		conditionListen.sleep();  // make listeners wait until spoken to.
+    	}
+    	if (speakers == 0){
+    		spoken = false;   // reset the spoken token if no more speakers exist.
+    	}
+    	int currentWord = word;    // transfer the word, another thread can modify "word"
+    	conditionWait.wakeAll();  // should only be one, but wakeall to be safe
+    	lock.release();   
+    	return currentWord;
     }
+    
+    private int word;
+    private Lock lock = new Lock();
+    private Condition2 conditionSpeak = new Condition2(lock);
+    private Condition2 conditionListen = new Condition2(lock);
+    private Condition2 conditionWait = new Condition2(lock);
+    
+    private int speakers = 0;
+    private boolean spoken = false;
 }
