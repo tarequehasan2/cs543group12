@@ -99,8 +99,7 @@ public class Alarm {
     	public void run() {
     		System.out.println("*** thread set to sleep for " + wakeTime + 
     				" starting at " + Machine.timer().getTime());
-    		Alarm testAlarm = new Alarm();
-    		testAlarm.waitUntil(wakeTime);
+    		ThreadedKernel.alarm.waitUntil(wakeTime);
     		System.out.println("*** thread woken up at " + Machine.timer().getTime());
     	}
 
@@ -114,7 +113,6 @@ public class Alarm {
     public static void selfTest() {
 	Lib.debug(dbgThread, "Enter Alarm.selfTest");
 	
-//	new KThread(new PingTest(1)).setName("forked thread").fork();
 	new KThread(new AlarmTest(1000)).fork();
 	new KThread(new AlarmTest(2000)).fork();
 	new KThread(new AlarmTest(5000)).fork();
@@ -122,7 +120,6 @@ public class Alarm {
 	new KThread(new AlarmTest(500)).fork();
 	new KThread(new AlarmTest(7000)).fork();
 	
-//	new PingTest(0).run();
     }
 
     private static final char dbgThread = 't';
