@@ -51,6 +51,7 @@ public class Alarm {
 				((KThread)it.next()).ready();
 			}
 		}
+		KThread.yield();
     }
 
 	/**
