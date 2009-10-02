@@ -36,8 +36,10 @@ public class Alarm {
 	 * should be run.
 	 */
 	public void timerInterrupt() {
+		mutex.acquire();
 		List<Long> keys = new ArrayList<Long>(wakeHash.keySet());
 		if (keys.size() == 0) {
+			mutex.release();
 			return;
 		}
 		Collections.sort(keys);
@@ -51,6 +53,7 @@ public class Alarm {
 				((KThread)it.next()).ready();
 			}
 		}
+		mutex.release();
 		KThread.yield();
     }
 
@@ -68,8 +71,9 @@ public class Alarm {
 	 * @see nachos.machine.Timer#getTime()
 	 */
 	public void waitUntil(long x) {
+		
     	boolean intStatus = Machine.interrupt().disable();
-    	
+    	mutex.acquire();
     	long wakeTime = Machine.timer().getTime() + x;
     	if (wakeHash.containsKey(wakeTime))
     	{
@@ -81,10 +85,12 @@ public class Alarm {
     		threads.add(KThread.currentThread());
     		wakeHash.put(wakeTime, threads);
     	}
+    	mutex.release();
     	KThread.sleep();
 
     	Machine.interrupt().restore(intStatus);
     }
 
 	private Map<Long, List<KThread>> wakeHash = new HashMap<Long, List<KThread>>();
+	private Lock mutex = new Lock();
 }
