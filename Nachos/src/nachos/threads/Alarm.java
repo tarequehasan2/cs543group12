@@ -91,6 +91,41 @@ public class Alarm {
     	Machine.interrupt().restore(intStatus);
     }
 
+    private static class AlarmTest implements Runnable {
+    	AlarmTest(long wakeTime) {
+    	    this.wakeTime = wakeTime;
+    	}
+    	
+    	public void run() {
+    		System.out.println("*** thread set to sleep for " + wakeTime + 
+    				" starting at " + Machine.timer().getTime());
+    		Alarm testAlarm = new Alarm();
+    		testAlarm.waitUntil(wakeTime);
+    		System.out.println("*** thread woken up at " + Machine.timer().getTime());
+    	}
+
+    	private long wakeTime;
+        }
+
+    
+    /**
+     * Tests whether this module is working.
+     */
+    public static void selfTest() {
+	Lib.debug(dbgThread, "Enter Alarm.selfTest");
+	
+//	new KThread(new PingTest(1)).setName("forked thread").fork();
+	new KThread(new AlarmTest(1000)).fork();
+	new KThread(new AlarmTest(2000)).fork();
+	new KThread(new AlarmTest(5000)).fork();
+	new KThread(new AlarmTest(10000)).fork();
+	new KThread(new AlarmTest(500)).fork();
+	new KThread(new AlarmTest(7000)).fork();
+	
+//	new PingTest(0).run();
+    }
+
+    private static final char dbgThread = 't';
 	private Map<Long, List<KThread>> wakeHash = new HashMap<Long, List<KThread>>();
 	private Lock mutex = new Lock();
 }
