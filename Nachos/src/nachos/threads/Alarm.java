@@ -3,8 +3,9 @@ package nachos.threads;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-
-import javax.swing.text.html.HTMLDocument.Iterator;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 
 import nachos.machine.*;
 
@@ -35,13 +36,16 @@ public class Alarm {
 	 * should be run.
 	 */
 	public void timerInterrupt() {
-		ArrayList<Long> keys = new ArrayList<Long>(wakeHash.keySet());
+		List<Long> keys = new ArrayList<Long>(wakeHash.keySet());
+		if (keys.size() == 0) {
+			return;
+		}
 		Collections.sort(keys);
 		long wakeTime = keys.get(0);
 		while (wakeTime <= Machine.timer().getTime())
 		{
-			ArrayList<KThread> threads = wakeHash.get(wakeTime);
-			java.util.Iterator<KThread> it = threads.iterator();
+			List<KThread> threads = wakeHash.get(wakeTime);
+			Iterator<KThread> it = threads.iterator();
 			while (it.hasNext())
 			{
 				((KThread)it.next()).ready();
@@ -72,7 +76,7 @@ public class Alarm {
     	}
     	else
     	{
-    		ArrayList<KThread> threads = new ArrayList<KThread>();
+    		List<KThread> threads = new ArrayList<KThread>();
     		threads.add(KThread.currentThread());
     		wakeHash.put(wakeTime, threads);
     	}
@@ -81,5 +85,5 @@ public class Alarm {
     	Machine.interrupt().restore(intStatus);
     }
 
-	private HashMap<Long, ArrayList<KThread>> wakeHash;
+	private Map<Long, List<KThread>> wakeHash = new HashMap<Long, List<KThread>>();
 }
