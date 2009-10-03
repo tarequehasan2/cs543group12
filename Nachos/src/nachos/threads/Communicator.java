@@ -56,7 +56,7 @@ public class Communicator {
     		spoken = false;   // reset the spoken token if no more speakers exist.
     	}
     	int currentWord = word;    // transfer the word, another thread can modify "word"
-    	conditionWait.wakeAll();  // should only be one, but wakeall to be safe
+    	conditionWait.wake();  // should only be one
     	mutex.release();   
     	return currentWord;
     }
