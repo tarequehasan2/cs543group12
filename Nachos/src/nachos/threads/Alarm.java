@@ -42,16 +42,22 @@ public class Alarm {
 			mutex.release();
 			return;
 		}
+		
 		Collections.sort(keys);
-		long wakeTime = keys.get(0);
+		
+		int currentKey = 0;
+		long wakeTime = keys.get(currentKey);
 		while (wakeTime <= Machine.timer().getTime())
 		{
 			List<KThread> threads = wakeHash.get(wakeTime);
+			wakeHash.remove(wakeTime);
 			Iterator<KThread> it = threads.iterator();
 			while (it.hasNext())
 			{
 				((KThread)it.next()).ready();
 			}
+			wakeTime = keys.get(++currentKey);
+			
 		}
 		mutex.release();
 		KThread.yield();
@@ -119,7 +125,7 @@ public class Alarm {
 	new KThread(new AlarmTest(10000)).fork();
 	new KThread(new AlarmTest(500)).fork();
 	new KThread(new AlarmTest(7000)).fork();
-	
+		
     }
 
     private static final char dbgThread = 't';
