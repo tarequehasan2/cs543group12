@@ -169,6 +169,9 @@ public class PriorityScheduler extends Scheduler {
 	 */
 	public boolean transferPriority;
     }
+    
+    java.util.PriorityQueue<ThreadState> waitQueue = new java.util.PriorityQueue<ThreadState>();
+ 
 
     /**
      * The scheduling state of a thread. This should include the thread's
@@ -177,16 +180,17 @@ public class PriorityScheduler extends Scheduler {
      *
      * @see	nachos.threads.KThread#schedulingState
      */
-    protected class ThreadState {
+    protected class ThreadState implements Comparable<ThreadState> {
+	private long creationTime;
 	/**
 	 * Allocate a new <tt>ThreadState</tt> object and associate it with the
 	 * specified thread.
 	 *
 	 * @param	thread	the thread this state belongs to.
 	 */
-	public ThreadState(KThread thread) {
+	public ThreadState(KThread thread){
 	    this.thread = thread;
-	    
+	    this.creationTime = Machine.timer().getTime();
 	    setPriority(priorityDefault);
 	}
 
@@ -257,5 +261,17 @@ public class PriorityScheduler extends Scheduler {
 	protected KThread thread;
 	/** The priority of the associated thread. */
 	protected int priority;
+	@Override
+	
+	// jnz - comparator reverses the natural ordering so that the highest Effective Priority is at the head of the queue
+	//  but within a given effective priority, the lowest creation time is at the head of the queue.
+	public int compareTo(ThreadState threadState) {
+		if (this.getEffectivePriority() == threadState.getEffectivePriority()){
+			return new Long(creationTime).compareTo(new Long(threadState.creationTime));
+		}else{
+			return -(new Integer(getEffectivePriority()).compareTo(threadState.getEffectivePriority()));
+		}
+		
+	}
     }
 }
