@@ -1,10 +1,7 @@
 package nachos.threads;
 
-import nachos.machine.*;
-
-import java.util.TreeSet;
-import java.util.HashSet;
-import java.util.Iterator;
+import nachos.machine.Lib;
+import nachos.machine.Machine;
 
 /**
  * A scheduler that chooses threads based on their priorities.
@@ -27,7 +24,8 @@ import java.util.Iterator;
  * particular, priority must be donated through locks, and through joins.
  */
 public class PriorityScheduler extends Scheduler {
-    /**
+
+	/**
      * Allocate a new priority scheduler.
      */
     public PriorityScheduler() {
@@ -109,6 +107,7 @@ public class PriorityScheduler extends Scheduler {
      */
     public static final int priorityMaximum = 7;    
 
+
     /**
      * Return the scheduling state of the specified thread.
      *
@@ -142,8 +141,10 @@ public class PriorityScheduler extends Scheduler {
 
 	public KThread nextThread() {
 	    Lib.assertTrue(Machine.interrupt().disabled());
-	    // implement me
-	    return null;
+	    // assuming that we have everything in order, we should be able to poll the queue.
+	    ThreadState threadState = (queue.peek() == null) ? null : queue.poll();
+	    lockHolder = threadState;
+	    return (threadState == null) ? null : threadState.thread;
 	}
 
 	/**
@@ -154,13 +155,15 @@ public class PriorityScheduler extends Scheduler {
 	 *		return.
 	 */
 	protected ThreadState pickNextThread() {
-	    // implement me
-	    return null;
+	    //  Assuming that we have everything in order, we should be able to peek at the queue
+	    return queue.peek();
 	}
 	
 	public void print() {
 	    Lib.assertTrue(Machine.interrupt().disabled());
-	    // implement me (if you want)
+	    for (ThreadState threadState: queue){
+	    	System.out.println(threadState.thread);
+	    }
 	}
 
 	/**
@@ -168,9 +171,11 @@ public class PriorityScheduler extends Scheduler {
 	 * threads to the owning thread.
 	 */
 	public boolean transferPriority;
+    protected ThreadState lockHolder;
+    protected java.util.PriorityQueue<ThreadState> queue = new java.util.PriorityQueue<ThreadState>();
+
     }
     
-    java.util.PriorityQueue<ThreadState> waitQueue = new java.util.PriorityQueue<ThreadState>();
  
 
     /**
@@ -181,7 +186,7 @@ public class PriorityScheduler extends Scheduler {
      * @see	nachos.threads.KThread#schedulingState
      */
     protected class ThreadState implements Comparable<ThreadState> {
-	private long creationTime;
+	
 	/**
 	 * Allocate a new <tt>ThreadState</tt> object and associate it with the
 	 * specified thread.
@@ -209,8 +214,14 @@ public class PriorityScheduler extends Scheduler {
 	 * @return	the effective priority of the associated thread.
 	 */
 	public int getEffectivePriority() {
-	    // implement me
-	    return priority;
+		
+		//  Effective priority should be the larger of the effective priority or the donated priority.
+		if (this.donation > this.priority){
+			return this.donation;
+		}else{
+			return this.priority;
+		}
+		
 	}
 
 	/**
@@ -222,9 +233,14 @@ public class PriorityScheduler extends Scheduler {
 	    if (this.priority == priority)
 		return;
 	    
+	    
 	    this.priority = priority;
 	    
-	    // implement me
+	   //implement me
+	    
+	    if (this.priority >= this.donation){
+	    	this.donation = 0;
+	    }
 	}
 
 	/**
@@ -240,7 +256,13 @@ public class PriorityScheduler extends Scheduler {
 	 * @see	nachos.threads.ThreadQueue#waitForAccess
 	 */
 	public void waitForAccess(PriorityQueue waitQueue) {
-	    // implement me
+		if (waitQueue.transferPriority 
+				&& (waitQueue.lockHolder.priority < (this.priority)
+						|| waitQueue.lockHolder.priority < (this.donation))){
+			waitQueue.lockHolder.donation = (this.priority > this.donation) 
+												? this.priority : this.donation;
+		}
+		waitQueue.queue.offer(this);
 	}
 
 	/**
@@ -248,19 +270,24 @@ public class PriorityScheduler extends Scheduler {
 	 * guarded by <tt>waitQueue</tt>. This can occur either as a result of
 	 * <tt>acquire(thread)</tt> being invoked on <tt>waitQueue</tt> (where
 	 * <tt>thread</tt> is the associated thread), or as a result of
-	 * <tt>nextThread()</tt> being invoked on <tt>waitQueue</tt>.
+	 * <tt>nextThread()</tt> being invoked on <tt>wait</tt>.
 	 *
 	 * @see	nachos.threads.ThreadQueue#acquire
 	 * @see	nachos.threads.ThreadQueue#nextThread
 	 */
 	public void acquire(PriorityQueue waitQueue) {
-	    // implement me
+		// jnz-  there should be nothing in the queue, so the first thread through is the lockHolder.
+	    waitQueue.lockHolder = this;
+	    waitQueue.queue.offer(this);
+	    
 	}	
 
 	/** The thread with which this object is associated. */	   
 	protected KThread thread;
 	/** The priority of the associated thread. */
 	protected int priority;
+	protected int donation;
+	protected long creationTime;
 	@Override
 	
 	// jnz - comparator reverses the natural ordering so that the highest Effective Priority is at the head of the queue
