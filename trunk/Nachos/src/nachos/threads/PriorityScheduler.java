@@ -45,12 +45,8 @@ public class PriorityScheduler extends Scheduler {
 
     public int getPriority(KThread thread) {
 	Lib.assertTrue(Machine.interrupt().disabled());
-	mutex.acquire();
-	int priority = 0;
 		       
-	priority = getThreadState(thread).getPriority();
-	mutex.release();
-	return priority;
+	return getThreadState(thread).getPriority();
     }
 
     public int getEffectivePriority(KThread thread) {
@@ -64,48 +60,38 @@ public class PriorityScheduler extends Scheduler {
 		       
 	Lib.assertTrue(priority >= priorityMinimum &&
 		   priority <= priorityMaximum);
-	mutex.acquire();
 	
 	getThreadState(thread).setPriority(priority);
-	mutex.release();
     }
 
     public boolean increasePriority() {
-	mutex.acquire();
 	boolean intStatus = Machine.interrupt().disable();
-	boolean status = true;
 		       
 	KThread thread = KThread.currentThread();
 
 	int priority = getPriority(thread);
 	if (priority == priorityMaximum)
-	    status = false;
+	    return false;
 
 	setPriority(thread, priority+1);
 
 	Machine.interrupt().restore(intStatus);
-	status = true;
-	mutex.release();
-	return status;
+	return true;
     }
 
     public boolean decreasePriority() {
-		mutex.acquire();
 	boolean intStatus = Machine.interrupt().disable();
-	boolean status = true;
 		       
 	KThread thread = KThread.currentThread();
 
 	int priority = getPriority(thread);
 	if (priority == priorityMinimum)
-	    status = false;
+	    return false;
 
 	setPriority(thread, priority-1);
 
 	Machine.interrupt().restore(intStatus);
-	status = true;
-	mutex.release();
-	return status;
+	return true;
     }
 
     /**
@@ -120,7 +106,6 @@ public class PriorityScheduler extends Scheduler {
      * The maximum priority that a thread can have. Do not change this value.
      */
     public static final int priorityMaximum = 7;    
-	private Lock mutex = new Lock();
 
 
     /**
@@ -130,13 +115,10 @@ public class PriorityScheduler extends Scheduler {
      * @return	the scheduling state of the specified thread.
      */
     protected ThreadState getThreadState(KThread thread) {
-    	mutex.acquire();
 	if (thread.schedulingState == null)
 	    thread.schedulingState = new ThreadState(thread);
 
-	ThreadState state = (ThreadState) thread.schedulingState;
-    mutex.release();
-    return state;
+	return (ThreadState) thread.schedulingState;
     }
 
     /**
@@ -149,27 +131,20 @@ public class PriorityScheduler extends Scheduler {
 
 	public void waitForAccess(KThread thread) {
 	    Lib.assertTrue(Machine.interrupt().disabled());
-		mutex.acquire();
 	    getThreadState(thread).waitForAccess(this);
-	    mutex.release();
 	}
 
 	public void acquire(KThread thread) {
 	    Lib.assertTrue(Machine.interrupt().disabled());
-		mutex.acquire();
 	    getThreadState(thread).acquire(this);
-	    mutex.release();
 	}
 
 	public KThread nextThread() {
 	    Lib.assertTrue(Machine.interrupt().disabled());
-		mutex.acquire();
 	    // assuming that we have everything in order, we should be able to poll the queue.
 	    ThreadState threadState = (queue.peek() == null) ? null : queue.poll();
 	    lockHolder = threadState;
-	    KThread threadToReturn = (threadState == null) ? null : threadState.thread;
-	    mutex.release();
-	    return threadToReturn;
+	    return (threadState == null) ? null : threadState.thread;
 	}
 
 	/**
@@ -180,11 +155,8 @@ public class PriorityScheduler extends Scheduler {
 	 *		return.
 	 */
 	protected ThreadState pickNextThread() {
-	    mutex.acquire();
 	    //  Assuming that we have everything in order, we should be able to peek at the queue
-	    ThreadState thread = queue.peek();
-	    mutex.release();
-	    return thread;
+	    return queue.peek();
 	}
 	
 	public void print() {
@@ -201,7 +173,6 @@ public class PriorityScheduler extends Scheduler {
 	public boolean transferPriority;
     protected ThreadState lockHolder;
     protected java.util.PriorityQueue<ThreadState> queue = new java.util.PriorityQueue<ThreadState>();
-	private Lock mutex = new Lock();
 
     }
     
@@ -243,16 +214,14 @@ public class PriorityScheduler extends Scheduler {
 	 * @return	the effective priority of the associated thread.
 	 */
 	public int getEffectivePriority() {
-		mutex.acquire();
-		int effectivePriority;
+		
 		//  Effective priority should be the larger of the effective priority or the donated priority.
 		if (this.donation > this.priority){
-			effectivePriority = this.donation;
+			return this.donation;
 		}else{
-			effectivePriority = this.priority;
+			return this.priority;
 		}
-	    mutex.release();
-	    return effectivePriority;
+		
 	}
 
 	/**
@@ -261,11 +230,8 @@ public class PriorityScheduler extends Scheduler {
 	 * @param	priority	the new priority.
 	 */
 	public void setPriority(int priority) {
-		mutex.acquire();
-	    if (this.priority == priority) {
-		    mutex.release();
-		    return;
-	    }
+	    if (this.priority == priority)
+		return;
 	    
 	    
 	    this.priority = priority;
@@ -275,7 +241,6 @@ public class PriorityScheduler extends Scheduler {
 	    if (this.priority >= this.donation){
 	    	this.donation = 0;
 	    }
-	    mutex.release();
 	}
 
 	/**
@@ -291,7 +256,6 @@ public class PriorityScheduler extends Scheduler {
 	 * @see	nachos.threads.ThreadQueue#waitForAccess
 	 */
 	public void waitForAccess(PriorityQueue waitQueue) {
-		mutex.acquire();
 		if (waitQueue.transferPriority 
 				&& (waitQueue.lockHolder.priority < (this.priority)
 						|| waitQueue.lockHolder.priority < (this.donation))){
@@ -299,7 +263,6 @@ public class PriorityScheduler extends Scheduler {
 												? this.priority : this.donation;
 		}
 		waitQueue.queue.offer(this);
-	    mutex.release();
 	}
 
 	/**
@@ -313,11 +276,10 @@ public class PriorityScheduler extends Scheduler {
 	 * @see	nachos.threads.ThreadQueue#nextThread
 	 */
 	public void acquire(PriorityQueue waitQueue) {
-		mutex.acquire();
 		// jnz-  there should be nothing in the queue, so the first thread through is the lockHolder.
 	    waitQueue.lockHolder = this;
 	    waitQueue.queue.offer(this);
-	    mutex.release();
+	    
 	}	
 
 	/** The thread with which this object is associated. */	   
@@ -326,7 +288,6 @@ public class PriorityScheduler extends Scheduler {
 	protected int priority;
 	protected int donation;
 	protected long creationTime;
-	private Lock mutex = new Lock();
 	@Override
 	
 	// jnz - comparator reverses the natural ordering so that the highest Effective Priority is at the head of the queue
