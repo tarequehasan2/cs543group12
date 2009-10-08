@@ -45,14 +45,20 @@ public class PriorityScheduler extends Scheduler {
 
     public int getPriority(KThread thread) {
 	Lib.assertTrue(Machine.interrupt().disabled());
+	boolean intStatus = Machine.interrupt().disable();
 		       
-	return getThreadState(thread).getPriority();
+	int priority = getThreadState(thread).getPriority();
+	Machine.interrupt().restore(intStatus);
+	return priority;
     }
 
     public int getEffectivePriority(KThread thread) {
 	Lib.assertTrue(Machine.interrupt().disabled());
+	boolean intStatus = Machine.interrupt().disable();
 		       
-	return getThreadState(thread).getEffectivePriority();
+	int effectivePriority = getThreadState(thread).getEffectivePriority();
+	Machine.interrupt().restore(intStatus);
+	return effectivePriority;
     }
 
     public void setPriority(KThread thread, int priority) {
@@ -60,38 +66,42 @@ public class PriorityScheduler extends Scheduler {
 		       
 	Lib.assertTrue(priority >= priorityMinimum &&
 		   priority <= priorityMaximum);
+	boolean intStatus = Machine.interrupt().disable();
 	
 	getThreadState(thread).setPriority(priority);
+	Machine.interrupt().restore(intStatus);
     }
 
     public boolean increasePriority() {
 	boolean intStatus = Machine.interrupt().disable();
+	boolean status = true;
 		       
 	KThread thread = KThread.currentThread();
 
 	int priority = getPriority(thread);
 	if (priority == priorityMaximum)
-	    return false;
+	    status = false;
 
 	setPriority(thread, priority+1);
 
 	Machine.interrupt().restore(intStatus);
-	return true;
+	return status;
     }
 
     public boolean decreasePriority() {
 	boolean intStatus = Machine.interrupt().disable();
+	boolean status = true;
 		       
 	KThread thread = KThread.currentThread();
 
 	int priority = getPriority(thread);
 	if (priority == priorityMinimum)
-	    return false;
+	    status = false;
 
 	setPriority(thread, priority-1);
 
 	Machine.interrupt().restore(intStatus);
-	return true;
+	return status;
     }
 
     /**
@@ -115,10 +125,13 @@ public class PriorityScheduler extends Scheduler {
      * @return	the scheduling state of the specified thread.
      */
     protected ThreadState getThreadState(KThread thread) {
+    	boolean intStatus = Machine.interrupt().disable();
 	if (thread.schedulingState == null)
 	    thread.schedulingState = new ThreadState(thread);
 
-	return (ThreadState) thread.schedulingState;
+	ThreadState state = (ThreadState) thread.schedulingState;
+	Machine.interrupt().restore(intStatus);
+	return state;
     }
 
     /**
@@ -131,20 +144,27 @@ public class PriorityScheduler extends Scheduler {
 
 	public void waitForAccess(KThread thread) {
 	    Lib.assertTrue(Machine.interrupt().disabled());
+		boolean intStatus = Machine.interrupt().disable();
 	    getThreadState(thread).waitForAccess(this);
+		Machine.interrupt().restore(intStatus);
 	}
 
 	public void acquire(KThread thread) {
 	    Lib.assertTrue(Machine.interrupt().disabled());
+		boolean intStatus = Machine.interrupt().disable();
 	    getThreadState(thread).acquire(this);
+		Machine.interrupt().restore(intStatus);
 	}
 
 	public KThread nextThread() {
 	    Lib.assertTrue(Machine.interrupt().disabled());
+		boolean intStatus = Machine.interrupt().disable();
 	    // assuming that we have everything in order, we should be able to poll the queue.
 	    ThreadState threadState = (queue.peek() == null) ? null : queue.poll();
 	    lockHolder = threadState;
-	    return (threadState == null) ? null : threadState.thread;
+	    KThread thread = (threadState == null) ? null : threadState.thread;
+		Machine.interrupt().restore(intStatus);
+		return thread;
 	}
 
 	/**
@@ -155,8 +175,11 @@ public class PriorityScheduler extends Scheduler {
 	 *		return.
 	 */
 	protected ThreadState pickNextThread() {
+		boolean intStatus = Machine.interrupt().disable();
 	    //  Assuming that we have everything in order, we should be able to peek at the queue
-	    return queue.peek();
+	    ThreadState state = queue.peek();
+		Machine.interrupt().restore(intStatus);
+		return state;
 	}
 	
 	public void print() {
@@ -205,7 +228,10 @@ public class PriorityScheduler extends Scheduler {
 	 * @return	the priority of the associated thread.
 	 */
 	public int getPriority() {
-	    return priority;
+		boolean intStatus = Machine.interrupt().disable();
+	    int returnPriority = priority;
+		Machine.interrupt().restore(intStatus);
+		return returnPriority;
 	}
 
 	/**
@@ -214,14 +240,17 @@ public class PriorityScheduler extends Scheduler {
 	 * @return	the effective priority of the associated thread.
 	 */
 	public int getEffectivePriority() {
+		boolean intStatus = Machine.interrupt().disable();
+		int priority = 0;
 		
 		//  Effective priority should be the larger of the effective priority or the donated priority.
 		if (this.donation > this.priority){
-			return this.donation;
+			priority = this.donation;
 		}else{
-			return this.priority;
+			priority = this.priority;
 		}
-		
+		Machine.interrupt().restore(intStatus);
+		return priority;
 	}
 
 	/**
@@ -230,8 +259,11 @@ public class PriorityScheduler extends Scheduler {
 	 * @param	priority	the new priority.
 	 */
 	public void setPriority(int priority) {
-	    if (this.priority == priority)
-		return;
+		boolean intStatus = Machine.interrupt().disable();
+	    if (this.priority == priority) {
+			Machine.interrupt().restore(intStatus);
+			return;
+	    }
 	    
 	    
 	    this.priority = priority;
@@ -241,6 +273,7 @@ public class PriorityScheduler extends Scheduler {
 	    if (this.priority >= this.donation){
 	    	this.donation = 0;
 	    }
+		Machine.interrupt().restore(intStatus);
 	}
 
 	/**
@@ -256,6 +289,7 @@ public class PriorityScheduler extends Scheduler {
 	 * @see	nachos.threads.ThreadQueue#waitForAccess
 	 */
 	public void waitForAccess(PriorityQueue waitQueue) {
+		boolean intStatus = Machine.interrupt().disable();
 		if (waitQueue.transferPriority 
 				&& (waitQueue.lockHolder.priority < (this.priority)
 						|| waitQueue.lockHolder.priority < (this.donation))){
@@ -263,6 +297,7 @@ public class PriorityScheduler extends Scheduler {
 												? this.priority : this.donation;
 		}
 		waitQueue.queue.offer(this);
+		Machine.interrupt().restore(intStatus);
 	}
 
 	/**
@@ -276,9 +311,11 @@ public class PriorityScheduler extends Scheduler {
 	 * @see	nachos.threads.ThreadQueue#nextThread
 	 */
 	public void acquire(PriorityQueue waitQueue) {
+		boolean intStatus = Machine.interrupt().disable();
 		// jnz-  there should be nothing in the queue, so the first thread through is the lockHolder.
 	    waitQueue.lockHolder = this;
 	    waitQueue.queue.offer(this);
+		Machine.interrupt().restore(intStatus);
 	    
 	}	
 
