@@ -225,7 +225,6 @@ public class KThread {
      */
     public static void yield() {
 	Lib.debug(dbgThread, "Yielding thread: " + currentThread.toString());
-	
 	Lib.assertTrue(currentThread.status == statusRunning);
 	
 	boolean intStatus = Machine.interrupt().disable();
@@ -265,7 +264,6 @@ public class KThread {
      */
     public void ready() {
 	Lib.debug(dbgThread, "Ready thread: " + toString());
-	
 	Lib.assertTrue(Machine.interrupt().disabled());
 	Lib.assertTrue(status != statusReady);
 	
@@ -432,7 +430,7 @@ public class KThread {
     	    for (int i=0; i<5; i++) {
     		System.out.println("*** thread " + which + " looped "
     				   + i + " times  --   JoinTest");
-    		currentThread.yield();
+    		yield();
     	    }
     	}
 
