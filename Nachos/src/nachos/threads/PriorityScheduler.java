@@ -45,20 +45,14 @@ public class PriorityScheduler extends Scheduler {
 
     public int getPriority(KThread thread) {
 	Lib.assertTrue(Machine.interrupt().disabled());
-	boolean intStatus = Machine.interrupt().disable();
 		       
-	int priority = getThreadState(thread).getPriority();
-	Machine.interrupt().restore(intStatus);
-	return priority;
+	return getThreadState(thread).getPriority();
     }
 
     public int getEffectivePriority(KThread thread) {
 	Lib.assertTrue(Machine.interrupt().disabled());
-	boolean intStatus = Machine.interrupt().disable();
 		       
-	int effectivePriority = getThreadState(thread).getEffectivePriority();
-	Machine.interrupt().restore(intStatus);
-	return effectivePriority;
+	return getThreadState(thread).getEffectivePriority();
     }
 
     public void setPriority(KThread thread, int priority) {
@@ -66,10 +60,8 @@ public class PriorityScheduler extends Scheduler {
 		       
 	Lib.assertTrue(priority >= priorityMinimum &&
 		   priority <= priorityMaximum);
-	boolean intStatus = Machine.interrupt().disable();
 	
 	getThreadState(thread).setPriority(priority);
-	Machine.interrupt().restore(intStatus);
     }
 
     public boolean increasePriority() {
@@ -103,6 +95,74 @@ public class PriorityScheduler extends Scheduler {
 	Machine.interrupt().restore(intStatus);
 	return status;
     }
+
+    private static class PriorityTest implements Runnable {
+    	PriorityTest() {
+    	}
+    	
+    	public void run() {
+    		KThread highPri1 = 
+    			new KThread(new Runnable() {
+    			   public void run() {
+					   System.out.println("High priority thread 1 listening");
+					   System.out.println("High priority thread 1 heard" + testCommunicator.listen());
+    				   for (int i = 0; i < 10; i++)
+    				   {
+    					   System.out.println("High priority thread 1 loop " + i);
+    					   long currentTime = Machine.timer().getTime();
+    					   while (Machine.timer().getTime() < currentTime + 1000)
+    					   {
+    					   }
+    				   }
+    		        }
+    		        }).setName("High Priority Thread #1");
+    		((ThreadState)highPri1.schedulingState).setPriority(priorityMaximum);
+    		highPri1.fork();
+    		
+    		KThread highPri2 = 
+    			new KThread(new Runnable() {
+    			   public void run() {
+					   System.out.println("High priority thread 2 listening");
+					   System.out.println("High priority thread 2 heard" + testCommunicator.listen());
+    				   for (int i = 0; i < 10; i++)
+    				   {
+    					   System.out.println("High priority thread 1 loop " + i);
+    					   long currentTime = Machine.timer().getTime();
+    					   while (Machine.timer().getTime() < currentTime + 1000)
+    					   {
+    					   }
+    				   }
+    		        }
+    		        }).setName("High Priority Thread #2");
+    		((ThreadState)highPri2.schedulingState).setPriority(priorityMaximum);
+    		highPri2.fork();
+    		
+    		KThread lowPri = 
+    			new KThread(new Runnable() {
+    			   public void run() {
+					   System.out.println("Low priority thread speaking");
+    				   testCommunicator.speak(1);
+					   System.out.println("Low priority thread speaking");
+    				   testCommunicator.speak(1);
+    		        }
+    		        }).setName("Low Priority Thread");
+    		lowPri.fork();
+    	}
+
+        private static Communicator testCommunicator = new Communicator();
+        }
+
+    
+    /**
+     * Tests whether this module is working.
+     */
+    public static void selfTest() {
+	Lib.debug(dbgThread, "Enter PriorityScheduler.selfTest");
+	new KThread(new PriorityTest()).fork();
+		
+    }
+    
+    private static final char dbgThread = 't';
 
     /**
      * The default priority for a new thread. Do not change this value.
@@ -139,32 +199,32 @@ public class PriorityScheduler extends Scheduler {
      */
     protected class PriorityQueue extends ThreadQueue {
 	PriorityQueue(boolean transferPriority) {
+		boolean intStatus = Machine.interrupt().disable();
 	    this.transferPriority = transferPriority;
+		Machine.interrupt().restore(intStatus);
 	}
 
 	public void waitForAccess(KThread thread) {
 	    Lib.assertTrue(Machine.interrupt().disabled());
-		boolean intStatus = Machine.interrupt().disable();
 	    getThreadState(thread).waitForAccess(this);
-		Machine.interrupt().restore(intStatus);
 	}
 
 	public void acquire(KThread thread) {
 	    Lib.assertTrue(Machine.interrupt().disabled());
-		boolean intStatus = Machine.interrupt().disable();
 	    getThreadState(thread).acquire(this);
-		Machine.interrupt().restore(intStatus);
 	}
 
 	public KThread nextThread() {
 	    Lib.assertTrue(Machine.interrupt().disabled());
-		boolean intStatus = Machine.interrupt().disable();
+	    if (transferPriority) {
+	    	this.lockHolder.donation = 0;
+	    }
 	    // assuming that we have everything in order, we should be able to poll the queue.
 	    ThreadState threadState = (queue.peek() == null) ? null : queue.poll();
-	    lockHolder = threadState;
-	    KThread thread = (threadState == null) ? null : threadState.thread;
-		Machine.interrupt().restore(intStatus);
-		return thread;
+	    if (transferPriority) {
+	    	lockHolder = threadState;
+	    }
+	    return (threadState == null) ? null : threadState.thread;
 	}
 
 	/**
@@ -313,14 +373,16 @@ public class PriorityScheduler extends Scheduler {
 	public void acquire(PriorityQueue waitQueue) {
 		boolean intStatus = Machine.interrupt().disable();
 		// jnz-  there should be nothing in the queue, so the first thread through is the lockHolder.
-	    waitQueue.lockHolder = this;
-	    waitQueue.queue.offer(this);
+		if (waitQueue.transferPriority)
+			waitQueue.lockHolder = this;
 		Machine.interrupt().restore(intStatus);
 	    
 	}	
 
 	/** The thread with which this object is associated. */	   
 	protected KThread thread;
+	/** The queue for which the thread holds the lock **/
+	protected PriorityQueue queue;
 	/** The priority of the associated thread. */
 	protected int priority;
 	protected int donation;
