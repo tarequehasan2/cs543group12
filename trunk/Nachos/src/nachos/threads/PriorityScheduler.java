@@ -59,13 +59,22 @@ public class PriorityScheduler extends Scheduler {
     }
 
     public void setPriority(KThread thread, int priority) {
-	Lib.assertTrue(Machine.interrupt().disabled());
-		       
-	Lib.assertTrue(priority >= priorityMinimum &&
-		   priority <= priorityMaximum);
-	
-	getThreadState(thread).setPriority(priority);
-    }
+    	Lib.assertTrue(Machine.interrupt().disabled());
+    		       
+    	Lib.assertTrue(priority >= priorityMinimum &&
+    		   priority <= priorityMaximum);
+    	
+    	ThreadState threadState = getThreadState(thread);
+    	boolean intStatus = Machine.interrupt().disable(); 
+    	threadState.setPriority(priority);
+    	if (threadState.waitingInQueue != null){
+    	threadState.waitingInQueue.queue.remove(threadState);
+    	
+    	threadState.waitingInQueue.queue.offer(threadState);
+    	}
+    	Machine.interrupt().restore(intStatus);
+    	
+        }
 
     public boolean increasePriority() {
 	boolean intStatus = Machine.interrupt().disable();
@@ -464,6 +473,20 @@ public class PriorityScheduler extends Scheduler {
 		if (waitQueue.transferPriority 
 				&& (waitQueue.lockHolder.getEffectivePriority() < (this.priority)
 						|| waitQueue.lockHolder.getEffectivePriority() < (this.donation))){
+			
+			
+	    	boolean intStatus = Machine.interrupt().disable(); 
+	    	waitQueue.lockHolder.donation = getEffectivePriority();
+	    	if (waitQueue.lockHolder.waitingInQueue != null){
+	    		waitQueue.lockHolder.waitingInQueue.queue.remove(waitQueue.lockHolder);
+	    	
+	    		waitQueue.lockHolder.waitingInQueue.queue.offer(waitQueue.lockHolder);
+	    	}
+	    	Machine.interrupt().restore(intStatus);
+
+			
+			
+			
 			waitQueue.lockHolder.donation = getEffectivePriority();
 			Lib.debug(dbgThread, "Donating priority of " + waitQueue.lockHolder.donation 
 					+" to " + waitQueue.lockHolder.thread.getName());
