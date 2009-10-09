@@ -106,7 +106,7 @@ public class PriorityScheduler extends Scheduler {
     			new KThread(new Runnable() {
     			   public void run() {
 					   System.out.println("High priority thread 1 listening");
-					   System.out.println("High priority thread 1 heard" + testCommunicator.listen());
+					   System.out.println("High priority thread 1 heard " + testCommunicator.listen());
     				   for (int i = 0; i < 10; i++)
     				   {
     					   System.out.println("High priority thread 1 loop " + i);
@@ -127,7 +127,7 @@ public class PriorityScheduler extends Scheduler {
     			new KThread(new Runnable() {
     			   public void run() {
 					   System.out.println("High priority thread 2 listening");
-					   System.out.println("High priority thread 2 heard" + testCommunicator.listen());
+					   System.out.println("High priority thread 2 heard " + testCommunicator.listen());
     				   for (int i = 0; i < 10; i++)
     				   {
     					   System.out.println("High priority thread 1 loop " + i);
@@ -157,13 +157,104 @@ public class PriorityScheduler extends Scheduler {
         private static Communicator testCommunicator = new Communicator();
         }
 
+    private static class DonationTest implements Runnable {
+    	DonationTest() {
+    	}
+    	
+    	public void run() {
+    		
+    		KThread lowPri = 
+    			new KThread(new Runnable() {
+    			   public void run() {
+					   System.out.println("Low priority getting lock");
+					   mutex.acquire();
+    				   for (int i = 0; i < 15; i++)
+    				   {
+    					   System.out.println("Low priority thread loop " + i);
+    					   long currentTime = Machine.timer().getTime();
+    					   while (Machine.timer().getTime() < currentTime + 500)
+    					   {
+    						   KThread.yield();
+    					   }
+						   KThread.yield();
+    				   }
+					   System.out.println("Low priority releasing lock");
+					   conditionWait.wake();
+					   mutex.release();
+    		        }
+    		        }).setName("Low Priority Thread");
+    		lowPri.fork();
+    		((ThreadState)lowPri.schedulingState).setPriority(2);
+
+    		/* wait a bit to make sure the low priority thread get the lock */
+			long currentTime = Machine.timer().getTime();
+			while (Machine.timer().getTime() < currentTime + 200)
+			{
+				KThread.yield();
+			}
+    		
+    		KThread midPri1 = 
+    			new KThread(new Runnable() {
+    			   public void run() {
+    				   for (int i = 0; i < 15; i++)
+    				   {
+    					   System.out.println("Mid priority thread 1 loop " + i);
+    					   long currentTime = Machine.timer().getTime();
+    					   while (Machine.timer().getTime() < currentTime + 500)
+    					   {
+    						   KThread.yield();
+    					   }
+						   KThread.yield();
+    				   }
+    		        }
+    		        }).setName("Mid Priority Thread #1");
+    		
+    		
+    		midPri1.fork();
+    		((ThreadState)midPri1.schedulingState).setPriority(6);
+    		
+    		currentTime = Machine.timer().getTime();
+			while (Machine.timer().getTime() < currentTime + 200)
+			{
+				KThread.yield();
+			}
+			
+    		KThread highPri = 
+    			new KThread(new Runnable() {
+    			   public void run() {
+					   System.out.println("High priority getting lock");
+					   mutex.acquire();
+    				   for (int i = 0; i < 15; i++)
+    				   {
+    					   System.out.println("High priority thread loop " + i);
+    					   long currentTime = Machine.timer().getTime();
+    					   while (Machine.timer().getTime() < currentTime + 500)
+    					   {
+    						   KThread.yield();
+    					   }
+						   KThread.yield();
+    				   }
+					   System.out.println("High priority releasing lock");
+					   conditionWait.wake();
+					   mutex.release();
+    		        }
+    		        }).setName("High Priority Thread");
+    		highPri.fork();
+    		((ThreadState)highPri.schedulingState).setPriority(priorityMaximum);
+    	}
+
+        private Lock mutex = new Lock();
+        private Condition2 conditionWait = new Condition2(mutex);
+        }
+
     
     /**
      * Tests whether this module is working.
      */
     public static void selfTest() {
 	Lib.debug(dbgThread, "Enter PriorityScheduler.selfTest");
-	new KThread(new PriorityTest()).fork();
+	//new KThread(new PriorityTest()).fork();
+	new KThread(new DonationTest()).fork();
 		
     }
     
@@ -228,6 +319,10 @@ public class PriorityScheduler extends Scheduler {
 	    		threadState.waitingInQueue = null;
 	    	}
 	    }
+	    KThread thread = (threadState == null) ? null : threadState.thread;
+	    if (thread != null && threadState != null)
+	    	Lib.debug(dbgThread, "Next thread is " + thread.getName() + 
+	    			" with effective priority " + threadState.getEffectivePriority());
 	    return (threadState == null) ? null : threadState.thread;
 	}
 
@@ -246,7 +341,8 @@ public class PriorityScheduler extends Scheduler {
 	public void print() {
 	    Lib.assertTrue(Machine.interrupt().disabled());
 	    for (ThreadState threadState: queue){
-	    	System.out.println(threadState.thread);
+	    	System.out.println(threadState.thread + " -- Priority " + threadState.getPriority() + 
+	    			" -- Effective Priority " + threadState.getEffectivePriority());
 	    }
 	}
 
@@ -365,6 +461,8 @@ public class PriorityScheduler extends Scheduler {
 				&& (waitQueue.lockHolder.getEffectivePriority() < (this.priority)
 						|| waitQueue.lockHolder.getEffectivePriority() < (this.donation))){
 			waitQueue.lockHolder.donation = getEffectivePriority();
+			Lib.debug(dbgThread, "Donating priority of " + waitQueue.lockHolder.donation 
+					+" to " + waitQueue.lockHolder.thread.getName());
 		}
 		
 		visitedQueues.add(waitQueue);
