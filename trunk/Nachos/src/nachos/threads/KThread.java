@@ -446,12 +446,12 @@ public class KThread {
 	Lib.debug(dbgThread, "Enter KThread.selfTest");
 	
 //	new KThread(new PingTest(1)).setName("forked thread").fork();
-	KThread thread = new KThread(new JoinTest(10));
+	/*KThread thread = new KThread(new JoinTest(10));
 	new KThread(new JoinTest(0,thread)).fork();
 	for (int i=1; i<10; i++){
 		new KThread(new JoinTest(i)).fork();
 	}
-	thread.fork();
+	thread.fork();*/
 	
 //	new PingTest(0).run();
     }
