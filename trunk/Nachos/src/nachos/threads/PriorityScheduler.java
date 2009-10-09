@@ -349,6 +349,7 @@ public class PriorityScheduler extends Scheduler {
 		donatePriority(waitQueue);
 		waitQueue.queue.offer(this);
 		this.waitingInQueue = waitQueue;
+		this.creationTime = Machine.timer().getTime();
 	}
 
 	private void donatePriority(PriorityQueue waitQueue) {
