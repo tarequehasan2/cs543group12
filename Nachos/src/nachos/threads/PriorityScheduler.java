@@ -168,6 +168,7 @@ public class PriorityScheduler extends Scheduler {
     			   public void run() {
 					   System.out.println("Low priority getting lock");
 					   mutex.acquire();
+					   ((ThreadState)KThread.currentThread().schedulingState).setPriority(2);
     				   for (int i = 0; i < 15; i++)
     				   {
     					   System.out.println("Low priority thread loop " + i);
@@ -184,7 +185,7 @@ public class PriorityScheduler extends Scheduler {
     		        }
     		        }).setName("Low Priority Thread");
     		lowPri.fork();
-    		((ThreadState)lowPri.schedulingState).setPriority(2);
+    		((ThreadState)lowPri.schedulingState).setPriority(7);
 
     		/* wait a bit to make sure the low priority thread get the lock */
 			long currentTime = Machine.timer().getTime();
@@ -211,7 +212,7 @@ public class PriorityScheduler extends Scheduler {
     		
     		
     		midPri1.fork();
-    		((ThreadState)midPri1.schedulingState).setPriority(6);
+    		((ThreadState)midPri1.schedulingState).setPriority(4);
     		
     		currentTime = Machine.timer().getTime();
 			while (Machine.timer().getTime() < currentTime + 200)
@@ -240,7 +241,7 @@ public class PriorityScheduler extends Scheduler {
     		        }
     		        }).setName("High Priority Thread");
     		highPri.fork();
-    		((ThreadState)highPri.schedulingState).setPriority(priorityMaximum);
+    		((ThreadState)highPri.schedulingState).setPriority(5);
     	}
 
         private Lock mutex = new Lock();
@@ -254,7 +255,9 @@ public class PriorityScheduler extends Scheduler {
     public static void selfTest() {
 	Lib.debug(dbgThread, "Enter PriorityScheduler.selfTest");
 	//new KThread(new PriorityTest()).fork();
-	new KThread(new DonationTest()).fork();
+	KThread donationtest = new KThread(new DonationTest());
+	donationtest.fork();
+	((ThreadState)donationtest.schedulingState).setPriority(6);
 		
     }
     
@@ -308,6 +311,7 @@ public class PriorityScheduler extends Scheduler {
 
 	public KThread nextThread() {
 	    Lib.assertTrue(Machine.interrupt().disabled());
+	    this.print();
 	    // assuming that we have everything in order, we should be able to poll the queue.
 	    ThreadState threadState = (queue.peek() == null) ? null : queue.poll();
 	    if (transferPriority) {
