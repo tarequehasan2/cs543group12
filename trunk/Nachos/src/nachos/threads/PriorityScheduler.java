@@ -261,7 +261,7 @@ public class PriorityScheduler extends Scheduler {
     /**
      * Tests whether this module is working.
      */
-    public static void selfTest() {
+   public static void selfTest() {
 	Lib.debug(dbgThread, "Enter PriorityScheduler.selfTest");
 	//new KThread(new PriorityTest()).fork();
 	KThread donationtest = new KThread(new DonationTest());
@@ -330,7 +330,9 @@ public class PriorityScheduler extends Scheduler {
 	    	lockHolder = threadState;
 	    	if (threadState != null){
 	    		threadState.waitingInQueue = null;
+	    		threadState.donatePriority(threadState.waitingInQueue);
 	    	}
+	    	
 	    }
 	    KThread thread = (threadState == null) ? null : threadState.thread;
 	    if (thread != null && threadState != null)
@@ -455,10 +457,10 @@ public class PriorityScheduler extends Scheduler {
 	 * @see	nachos.threads.ThreadQueue#waitForAccess
 	 */
 	public void waitForAccess(PriorityQueue waitQueue) {
-		donatePriority(waitQueue);
-		waitQueue.queue.offer(this);
 		this.waitingInQueue = waitQueue;
 		this.creationTime = Machine.timer().getTime();
+		waitQueue.queue.offer(this);
+		donatePriority(waitQueue);
 	}
 
 	private void donatePriority(PriorityQueue waitQueue) {
