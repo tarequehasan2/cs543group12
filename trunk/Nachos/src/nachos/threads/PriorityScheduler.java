@@ -108,8 +108,9 @@ public class PriorityScheduler extends Scheduler {
     				   {
     					   System.out.println("High priority thread 1 loop " + i);
     					   long currentTime = Machine.timer().getTime();
-    					   while (Machine.timer().getTime() < currentTime + 1000)
+    					   while (Machine.timer().getTime() < currentTime + 500)
     					   {
+    						   KThread.yield();
     					   }
     				   }
     		        }
@@ -128,8 +129,9 @@ public class PriorityScheduler extends Scheduler {
     				   {
     					   System.out.println("High priority thread 1 loop " + i);
     					   long currentTime = Machine.timer().getTime();
-    					   while (Machine.timer().getTime() < currentTime + 1000)
+    					   while (Machine.timer().getTime() < currentTime + 500)
     					   {
+    						   KThread.yield();
     					   }
     				   }
     		        }
