@@ -1,5 +1,8 @@
 package nachos.threads;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import nachos.machine.Lib;
 import nachos.machine.Machine;
 
@@ -221,6 +224,9 @@ public class PriorityScheduler extends Scheduler {
 	    		lockHolder.donation = 0;
 	    	}
 	    	lockHolder = threadState;
+	    	if (threadState != null){
+	    		threadState.waitingInQueue = null;
+	    	}
 	    }
 	    return (threadState == null) ? null : threadState.thread;
 	}
@@ -319,7 +325,13 @@ public class PriorityScheduler extends Scheduler {
 	    if (this.priority >= this.donation){
 	    	this.donation = 0;
 	    }
+	    if (this.waitingInQueue != null){
+	    	donatePriority(this.waitingInQueue);
+	    }
+	    
+	    
 	}
+
 
 	/**
 	 * Called when <tt>waitForAccess(thread)</tt> (where <tt>thread</tt> is
@@ -334,13 +346,34 @@ public class PriorityScheduler extends Scheduler {
 	 * @see	nachos.threads.ThreadQueue#waitForAccess
 	 */
 	public void waitForAccess(PriorityQueue waitQueue) {
-		if (waitQueue.transferPriority && waitQueue.lockHolder != null
-				&& (waitQueue.lockHolder.priority < (this.priority)
-						|| waitQueue.lockHolder.priority < (this.donation))){
-			waitQueue.lockHolder.donation = (this.priority > this.donation) 
-												? this.priority : this.donation;
-		}
+		donatePriority(waitQueue);
 		waitQueue.queue.offer(this);
+		this.waitingInQueue = waitQueue;
+	}
+
+	private void donatePriority(PriorityQueue waitQueue) {
+		donatePriority(waitQueue, new ArrayList<PriorityQueue>());
+	}
+
+	private void donatePriority(PriorityQueue waitQueue,
+			List<PriorityQueue> visitedQueues) {
+		if (waitQueue.lockHolder == null || visitedQueues.contains(waitQueue))
+			return;
+		
+		if (waitQueue.transferPriority 
+				&& (waitQueue.lockHolder.getEffectivePriority() < (this.priority)
+						|| waitQueue.lockHolder.getEffectivePriority() < (this.donation))){
+			waitQueue.lockHolder.donation = getEffectivePriority();
+		}
+		
+		visitedQueues.add(waitQueue);
+		
+		if (waitQueue.lockHolder.waitingInQueue != null){
+			donatePriority(waitQueue.lockHolder.waitingInQueue, visitedQueues);
+		}
+		
+		 
+		
 	}
 
 	/**
@@ -366,6 +399,7 @@ public class PriorityScheduler extends Scheduler {
 	/** The thread with which this object is associated. */	   
 	protected KThread thread;
 	/** The priority of the associated thread. */
+	protected PriorityQueue waitingInQueue;
 	protected int priority;
 	protected int donation;
 	protected long creationTime;
