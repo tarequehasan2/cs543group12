@@ -47,7 +47,8 @@ public class Alarm {
 		
 		int currentKey = 0;
 		long wakeTime = keys.get(currentKey);
-		while (wakeTime <= Machine.timer().getTime())
+		boolean done = false;
+		while (wakeTime <= Machine.timer().getTime() && !done)
 		{
 			List<KThread> threads = wakeHash.get(wakeTime);
 			wakeHash.remove(wakeTime);
@@ -56,8 +57,11 @@ public class Alarm {
 			{
 				((KThread)it.next()).ready();
 			}
-			wakeTime = keys.get(++currentKey);
-			
+			if (++currentKey == keys.size()){
+				done = true;
+			}else{
+				wakeTime = keys.get(currentKey);
+			}
 		}
 		mutex.release();
 		KThread.yield();
