@@ -329,8 +329,9 @@ public class PriorityScheduler extends Scheduler {
 	    	}
 	    	lockHolder = threadState;
 	    	if (threadState != null){
-	    		threadState.waitingInQueue = null;
 	    		threadState.donatePriority(threadState.waitingInQueue);
+	    		threadState.waitingInQueue = null;
+	    		
 	    	}
 	    	
 	    }
