@@ -320,7 +320,6 @@ public class PriorityScheduler extends Scheduler {
 
 	public KThread nextThread() {
 	    Lib.assertTrue(Machine.interrupt().disabled());
-	    this.print();
 	    // assuming that we have everything in order, we should be able to poll the queue.
 	    ThreadState threadState = (queue.peek() == null) ? null : queue.poll();
 	    if (transferPriority) {
