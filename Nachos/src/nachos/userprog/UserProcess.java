@@ -25,6 +25,12 @@ public class UserProcess {
     public UserProcess() {
 	int numPhysPages = Machine.processor().getNumPhysPages();
 	pageTable = new TranslationEntry[numPhysPages];
+	fileDescriptors = new OpenFile[maxNumFiles];
+	filePositions = new int[maxNumFiles];
+	// set our current file position to "not open"
+	for (int i = 0; i < maxNumFiles; i++) {
+		filePositions[i] = -1;
+	}
 	for (int i=0; i<numPhysPages; i++)
 	    pageTable[i] = new TranslationEntry(i,i, true,false,false,false);
     }
@@ -270,6 +276,12 @@ public class UserProcess {
 	    Lib.assertTrue(writeVirtualMemory(stringOffset,new byte[] { 0 }) == 1);
 	    stringOffset += 1;
 	}
+	
+	// open stdin and stdout
+	fileDescriptors[0] = UserKernel.console.openForReading();
+	filePositions[0] = 0;
+	fileDescriptors[1] = UserKernel.console.openForWriting();
+	filePositions[1] = 0;
 
 	return true;
     }
@@ -504,7 +516,10 @@ public class UserProcess {
     
     private int initialPC, initialSP;
     private int argc, argv;
+    private OpenFile[] fileDescriptors;
+    private int[] filePositions;
 	
     private static final int pageSize = Processor.pageSize;
     private static final char dbgProcess = 'a';
+    private static final int maxNumFiles = 16;
 }
