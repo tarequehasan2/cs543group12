@@ -339,7 +339,7 @@ public class UserProcess {
      * Handle the halt() system call. 
      */
     private int handleHalt() {
-
+  //TODO determine root process and only allow root process to halt
 	Machine.halt();
 	
 	Lib.assertNotReached("Machine.halt() did not halt machine!");
@@ -349,15 +349,15 @@ public class UserProcess {
 
     private static final int
         syscallHalt = 0,
-	syscallExit = 1,
-	syscallExec = 2,
-	syscallJoin = 3,
-	syscallCreate = 4,
-	syscallOpen = 5,
-	syscallRead = 6,
-	syscallWrite = 7,
-	syscallClose = 8,
-	syscallUnlink = 9;
+    	syscallExit = 1,
+    	syscallExec = 2,
+    	syscallJoin = 3,
+    	syscallCreate = 4,
+    	syscallOpen = 5,
+    	syscallRead = 6,
+    	syscallWrite = 7,
+    	syscallClose = 8,
+    	syscallUnlink = 9;
 
     /**
      * Handle a syscall exception. Called by <tt>handleException()</tt>. The
@@ -391,8 +391,24 @@ public class UserProcess {
 	switch (syscall) {
 	case syscallHalt:
 	    return handleHalt();
-
-
+	case syscallExit:
+	    return handleExit(a0);
+	case syscallExec:
+	    return handleExec(a0,a1,a2);
+	case syscallJoin:
+	    return handleJoin(a0,a1);
+	case syscallCreate:
+	    return handleCreate(a0);
+	case syscallOpen:
+	    return handleOpen(a0);
+	case syscallRead:
+	    return handleRead(a0,a1,a2);
+	case syscallWrite:
+	    return handleWrite(a0,a1,a2);
+	case syscallClose:
+	    return handleClose(a0);
+	case syscallUnlink:
+    	return handleUnlink(a0);
 	default:
 	    Lib.debug(dbgProcess, "Unknown syscall " + syscall);
 	    Lib.assertNotReached("Unknown system call!");
@@ -400,7 +416,52 @@ public class UserProcess {
 	return 0;
     }
 
-    /**
+    private int handleUnlink(int a0) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	private int handleClose(int a0) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	private int handleWrite(int a0, int a1, int a2) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	private int handleRead(int a0, int a1, int a2) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	private int handleOpen(int a0) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	private int handleCreate(int a0) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	private int handleJoin(int a0, int a1) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	private int handleExec(int a0, int a1, int a2) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	private int handleExit(int a0) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	/**
      * Handle a user exception. Called by
      * <tt>UserKernel.exceptionHandler()</tt>. The
      * <i>cause</i> argument identifies which exception occurred; see the
