@@ -282,6 +282,7 @@ public class UserProcess {
 	filePositions[0] = 0;
 	fileDescriptors[1] = UserKernel.console.openForWriting();
 	filePositions[1] = 0;
+	numOpenFiles = 2;
 
 	return true;
     }
@@ -449,8 +450,41 @@ public class UserProcess {
 	}
 
 	private int handleOpen(int a0) {
-		// TODO Auto-generated method stub
-		return 0;
+		int fd = 2;
+		try
+		{
+			if (numOpenFiles < maxNumFiles)
+			{
+				byte[] data = new byte[256];
+				int strLength = readVirtualMemory(a0, data);
+				if (strLength == 0)
+				{
+					return -1;
+				}
+				String filename = new String(data);
+				FileSystem fs = Machine.stubFileSystem();
+				OpenFile file = fs.open(filename, false);
+				if (file != null)
+				{
+					while (fileDescriptors[fd] != null)
+					{
+						fd++;
+					}
+					fileDescriptors[fd] = file;
+					filePositions[fd] = 0;
+					numOpenFiles++;
+				}
+				else 
+				{
+					fd = -1;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			return -1;
+		}
+		return fd;
 	}
 
 	private int handleCreate(int a0) {
@@ -518,6 +552,7 @@ public class UserProcess {
     private int argc, argv;
     private OpenFile[] fileDescriptors;
     private int[] filePositions;
+    private int numOpenFiles = 0;
 	
     private static final int pageSize = Processor.pageSize;
     private static final char dbgProcess = 'a';
