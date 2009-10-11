@@ -435,8 +435,22 @@ public class UserProcess {
 	}
 
 	private int handleClose(int a0) {
-		// TODO Auto-generated method stub
-		return 0;
+		int status = 0;
+		try
+		{
+			if (a0 < maxNumFiles && fileDescriptors[a0] != null)
+			{
+				fileDescriptors[a0].close();
+				fileDescriptors[a0] = null;
+				filePositions[a0] = -1;
+				numOpenFiles--;
+			}
+		}
+		catch (Exception ex)
+		{
+			status = -1;
+		}
+		return status;
 	}
 
 	private int handleWrite(int a0, int a1, int a2) {
@@ -488,8 +502,41 @@ public class UserProcess {
 	}
 
 	private int handleCreate(int a0) {
-		// TODO Auto-generated method stub
-		return 0;
+		int fd = 2;
+		try
+		{
+			if (numOpenFiles < maxNumFiles)
+			{
+				byte[] data = new byte[256];
+				int strLength = readVirtualMemory(a0, data);
+				if (strLength == 0)
+				{
+					return -1;
+				}
+				String filename = new String(data);
+				FileSystem fs = Machine.stubFileSystem();
+				OpenFile file = fs.open(filename, true);
+				if (file != null)
+				{
+					while (fileDescriptors[fd] != null)
+					{
+						fd++;
+					}
+					fileDescriptors[fd] = file;
+					filePositions[fd] = 0;
+					numOpenFiles++;
+				}
+				else 
+				{
+					fd = -1;
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			return -1;
+		}
+		return fd;
 	}
 
 	private int handleJoin(int a0, int a1) {
