@@ -99,68 +99,7 @@ public final class Machine {
 	stats.print();
 	terminate();
     }
- //<jjt>  
-    public static void exit() {
-    	System.out.print("Machine exit!\n\n");
-    	stats.print();
-    	terminate();
-        }
-    public static void exec() {
-    	System.out.print("Machine executing!\n\n");
-    	stats.print();
-    	terminate();
-        }
-    public static void join() {
-    	System.out.print("Machine joining!\n\n");
-    	stats.print();
-    	terminate();
-        }
-    public static void create() {
-    	System.out.print("Machine creating!\n\n");
-    	stats.print();
-    	terminate();
-        }
-    public static void open() {
-    	System.out.print("Machine opening!\n\n");
-    	stats.print();
-    	terminate();
-        }
-    public static void read() {
-    	System.out.print("Machine reading!\n\n");
-    	stats.print();
-    	terminate();
-        }
-    public static void write() {
-    	System.out.print("Machine writing!\n\n");
-    	stats.print();
-    	terminate();
-        }
-    public static void close() {
-    	System.out.print("Machine closing!\n\n");
-    	stats.print();
-    	terminate();
-        }
-    public static void unlink() {
-    	System.out.print("Machine unlinking!\n\n");
-    	stats.print();
-    	terminate();
-        }
-    public static void Mmap() {
-    	System.out.print("Machine Mmaping!\n\n");
-    	stats.print();
-    	terminate();
-        }
-    public static void connect() {
-    	System.out.print("Machine connecting!\n\n");
-    	stats.print();
-    	terminate();
-        }
-    public static void accept() {
-    	System.out.print("Machine accept!\n\n");
-    	stats.print();
-    	terminate();
-        }
-//</jjt>    
+
     /**
      * Return an array containing all command line arguments.
      *
