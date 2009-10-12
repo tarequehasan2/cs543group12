@@ -358,104 +358,6 @@ public class UserProcess {
 	Lib.assertNotReached("Machine.halt() did not halt machine!");
 	return 0;
     }
-//  <jjt>
-    private int handleExit() {
-
-	Machine.exit();
-	
-	Lib.assertNotReached("Machine.exit() did not exit machine!");
-	return 1;
-    }
-
-    private int handleExec() {
-
-	Machine.exec();
-	
-	Lib.assertNotReached("Machine.exit() did not exec machine!");
-	return 2;
-    }
-	
-	private int handleJoin() {
-
-	Machine.join();
-	
-	Lib.assertNotReached("Machine.join() did not join machine!");
-	return 3;
-    }
-	
-	private int handleCreate() {
-
-	Machine.create();
-	
-	Lib.assertNotReached("Machine.create() did not create machine!");
-	return 4;
-    }
-	
-	private int handleOpen() {
-
-	Machine.open();
-	
-	Lib.assertNotReached("Machine.open() did not open machine!");
-	return 5;
-    }
-
-	private int handleRead() {
-
-	Machine.read();
-	
-	Lib.assertNotReached("Machine.read() did not read machine!");
-	return 6;
-    }
-
-	private int handleWrite() {
-
-	Machine.write();
-	
-	Lib.assertNotReached("Machine.write() did not write machine!");
-	return 7;
-    }
-
-	private int handleClose() {
-
-	Machine.close();
-	
-	Lib.assertNotReached("Machine.close() did not close machine!");
-	return 8;
-    }
-	
-	private int handleUnlink() {
-
-	Machine.unlink();
-	
-	Lib.assertNotReached("Machine.unlink() did not unlink machine!");
-	return 9;
-    }
-	
-	private int handleMmap() {
-
-	Machine.Mmap();
-	
-	Lib.assertNotReached("Machine.Mmap() did not Mmap machine!");
-	return 10;
-    }
-	private int handleConnect() {
-
-	Machine.connect();
-	
-	Lib.assertNotReached("Machine.connect() did not connect machine!");
-	return 11;
-    }
-	
-	private int handleAccept() {
-
-	Machine.accept();
-	
-	Lib.assertNotReached("Machine.accept() did not accept machine!");
-	return 12;
-    }
-	
-//</jjt>
- 
 
 
     private static final int
@@ -469,11 +371,6 @@ public class UserProcess {
     	syscallWrite = 7,
     	syscallClose = 8,
     	syscallUnlink = 9;
-// <jjt>
-//      syscallMmap = 10,
-//	    syscallConnect = 11,
-//      syscallAccept = 12;
-// </jjt>
 
     /**
      * Handle a syscall exception. Called by <tt>handleException()</tt>. The
