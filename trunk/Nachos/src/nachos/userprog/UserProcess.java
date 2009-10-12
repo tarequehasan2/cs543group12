@@ -33,7 +33,12 @@ public class UserProcess {
 	}
 	for (int i=0; i<numPhysPages; i++)
 	    pageTable[i] = new TranslationEntry(i,i, true,false,false,false);
+	mutex.acquire();
+	pid = currentPID;
+	currentPID++;
+	mutex.release();
     }
+    
     
     /**
      * Allocate and return a new process of the correct class. The class name
@@ -352,11 +357,12 @@ public class UserProcess {
      * Handle the halt() system call. 
      */
     private int handleHalt() {
-  //TODO determine root process and only allow root process to halt
-	Machine.halt();
+    	if (pid == 0){
+    		Machine.halt();
 	
-	Lib.assertNotReached("Machine.halt() did not halt machine!");
-	return 0;
+    		Lib.assertNotReached("Machine.halt() did not halt machine!");
+    	}
+    	return -1;
     }
 
 
@@ -545,8 +551,20 @@ public class UserProcess {
 	}
 
 	private int handleExec(int a0, int a1, int a2) {
-		// TODO Auto-generated method stub
-		return 0;
+		if (a0 < 0 || a1 < 0){
+			return -1;
+		}
+			// method adds 1 to numBytes for max 256
+		String fileName = this.readVirtualMemoryString(a0, 255);
+		if (fileName == null || !fileName.endsWith(".coff")){
+			return -1;
+		}
+		String[] arguments = new String[a1];
+		// TODO read arguments from virtual memory
+		UserProcess child = new UserProcess();
+		boolean executed = child.execute(fileName, arguments);
+		child.parentPid = this.pid;
+		return (executed)? child.pid : -1;
 	}
 
 	private int handleExit(int a0) {
@@ -600,8 +618,12 @@ public class UserProcess {
     private OpenFile[] fileDescriptors;
     private int[] filePositions;
     private int numOpenFiles = 0;
+    private int pid;
+    private int parentPid;
 	
     private static final int pageSize = Processor.pageSize;
     private static final char dbgProcess = 'a';
     private static final int maxNumFiles = 16;
+    private static int currentPID = 0;
+    private static Lock mutex = new Lock();
 }
