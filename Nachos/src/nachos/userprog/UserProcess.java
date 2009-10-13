@@ -9,6 +9,7 @@ import java.util.Map;
 import nachos.machine.Coff;
 import nachos.machine.CoffSection;
 import nachos.machine.FileSystem;
+import nachos.machine.Kernel;
 import nachos.machine.Lib;
 import nachos.machine.Machine;
 import nachos.machine.OpenFile;
@@ -56,6 +57,7 @@ public class UserProcess {
 	mutex.acquire();
 	pid = currentPID;
 	currentPID++;
+	numActiveProcesses++;
 	mutex.release();
     }
     
@@ -728,8 +730,13 @@ public class UserProcess {
 			parentProcess.instanceMutex.release();
 		}
 		unloadSections();
-		if (0 == pid) {
-			Machine.halt();
+
+		mutex.acquire();
+		numActiveProcesses--;
+		final boolean noMoreProcesses = (numActiveProcesses == 0);
+		mutex.release();
+		if (noMoreProcesses){
+			Kernel.kernel.terminate();
 		}
 		debug("calling finish()");
 		UThread.finish();
@@ -896,6 +903,7 @@ public class UserProcess {
      * which is protected by <tt>mutex</tt>.
      */
     private static int currentPID = 0;
+    private static int numActiveProcesses = 0;
     private static Lock mutex = new Lock();
     /**
      * Contains the maximum string length for a syscall.
