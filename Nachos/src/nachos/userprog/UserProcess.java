@@ -1,14 +1,22 @@
 package nachos.userprog;
 
-import nachos.machine.*;
-import nachos.threads.*;
-import nachos.userprog.*;
-
 import java.io.EOFException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import nachos.machine.Coff;
+import nachos.machine.CoffSection;
+import nachos.machine.FileSystem;
+import nachos.machine.Lib;
+import nachos.machine.Machine;
+import nachos.machine.OpenFile;
+import nachos.machine.Processor;
+import nachos.machine.TranslationEntry;
+import nachos.threads.Condition2;
+import nachos.threads.Lock;
+import nachos.threads.ThreadedKernel;
 
 /**
  * Encapsulates the state of a user process that is not contained in its
@@ -36,7 +44,15 @@ public class UserProcess {
 		filePositions[i] = -1;
 	}
 	for (int i=0; i<numPhysPages; i++)
-	    pageTable[i] = new TranslationEntry(i,i, true,false,false,false);
+	{
+	    int vpn = i;
+	    int ppn = i;
+	    boolean valid = true;
+	    boolean readOnly = false;
+	    boolean used = false;
+	    boolean dirty = false;
+		pageTable[vpn] = new TranslationEntry(vpn, ppn, valid, readOnly, used, dirty);
+	}
 	mutex.acquire();
 	pid = currentPID;
 	currentPID++;
@@ -64,11 +80,14 @@ public class UserProcess {
      * @return	<tt>true</tt> if the program was successfully executed.
      */
     public boolean execute(String name, String[] args) {
-	if (!load(name, args))
+    	debug("Loading "+name+" ("+java.util.Arrays.toString(args)+")");
+	if (!load(name, args)) 
+	{
+		debug("load() returned FALSE, so execute() is returning false");
 	    return false;
-	
+	}
+	debug( "Forking UThread("+name+")...");
 	new UThread(this).setName(name).fork();
-
 	return true;
     }
 
@@ -212,11 +231,11 @@ public class UserProcess {
      * @return	<tt>true</tt> if the executable was successfully loaded.
      */
     private boolean load(String name, String[] args) {
-	Lib.debug(dbgProcess, "UserProcess.load(\"" + name + "\")");
+	debug( "UserProcess.load(\"" + name + "\")");
 	
 	OpenFile executable = ThreadedKernel.fileSystem.open(name, false);
 	if (executable == null) {
-	    Lib.debug(dbgProcess, "\topen failed");
+	    debug( "\topen failed");
 	    return false;
 	}
 
@@ -225,7 +244,7 @@ public class UserProcess {
 	}
 	catch (EOFException e) {
 	    executable.close();
-	    Lib.debug(dbgProcess, "\tcoff load failed");
+	    debug( "\tcoff load failed");
 	    return false;
 	}
 
@@ -235,7 +254,7 @@ public class UserProcess {
 	    CoffSection section = coff.getSection(s);
 	    if (section.getFirstVPN() != numPages) {
 		coff.close();
-		Lib.debug(dbgProcess, "\tfragmented executable");
+		debug( "\tfragmented executable");
 		return false;
 	    }
 	    numPages += section.getLength();
@@ -251,7 +270,7 @@ public class UserProcess {
 	}
 	if (argsSize > pageSize) {
 	    coff.close();
-	    Lib.debug(dbgProcess, "\targuments too long");
+	    debug( "\targuments too long");
 	    return false;
 	}
 
@@ -306,7 +325,7 @@ public class UserProcess {
     protected boolean loadSections() {
 	if (numPages > Machine.processor().getNumPhysPages()) {
 	    coff.close();
-	    Lib.debug(dbgProcess, "\tinsufficient physical memory");
+	    debug( "\tinsufficient physical memory");
 	    return false;
 	}
 
@@ -314,7 +333,7 @@ public class UserProcess {
 	for (int s=0; s<coff.getNumSections(); s++) {
 	    CoffSection section = coff.getSection(s);
 	    
-	    Lib.debug(dbgProcess, "\tinitializing " + section.getName()
+	    debug( "\tinitializing " + section.getName()
 		      + " section (" + section.getLength() + " pages)");
 
 	    for (int i=0; i<section.getLength(); i++) {
@@ -347,7 +366,7 @@ public class UserProcess {
 	Processor processor = Machine.processor();
 
 	// by default, everything's 0
-	for (int i=0; i<processor.numUserRegisters; i++)
+	for (int i=0; i<Processor.numUserRegisters; i++)
 	    processor.writeRegister(i, 0);
 
 	// initialize PC and SP according
@@ -445,7 +464,7 @@ public class UserProcess {
 
     private int handleUnlink(int a0) {
 		// TODO Auto-generated method stub
-		return 0;
+		return -1;
 	}
 
 	private int handleClose(int a0) {
@@ -466,32 +485,28 @@ public class UserProcess {
 		}
 		return status;
 	}
-
+	
 	private int handleWrite(int a0, int a1, int a2) {
 		// TODO Auto-generated method stub
-		return 0;
+		return -1;
 	}
 
 	private int handleRead(int a0, int a1, int a2) {
 		// TODO Auto-generated method stub
-		return 0;
+		return -1;
 	}
 
 	private int handleOpen(int a0) {
+		debug("handleOpen("+a0+")");
 		int fd = 2;
 		try
 		{
 			if (numOpenFiles < maxNumFiles)
 			{
-				byte[] data = new byte[256];
-				int strLength = readVirtualMemory(a0, data);
-				if (strLength == 0)
-				{
-					return -1;
-				}
-				String filename = new String(data);
+				String filename = readSZ(a0);
 				FileSystem fs = Machine.stubFileSystem();
-				OpenFile file = fs.open(filename, false);
+				boolean createOnOpen = false;
+				OpenFile file = fs.open(filename, createOnOpen);
 				if (file != null)
 				{
 					while (fileDescriptors[fd] != null)
@@ -521,13 +536,15 @@ public class UserProcess {
 		{
 			if (numOpenFiles < maxNumFiles)
 			{
-				byte[] data = new byte[256];
-				int strLength = readVirtualMemory(a0, data);
-				if (strLength == 0)
+				String filename;
+				try 
+				{
+					filename = readSZ(a0);
+				}
+				catch (IllegalArgumentException iae)
 				{
 					return -1;
 				}
-				String filename = new String(data);
 				FileSystem fs = Machine.stubFileSystem();
 				OpenFile file = fs.open(filename, true);
 				if (file != null)
@@ -590,7 +607,7 @@ public class UserProcess {
 			waitingToJoin = a0;
 			joinCondition.sleep();
 		}
-		int sizeOfInt = 4;
+		final int sizeOfInt = 4;
 		Integer status = terminatedChildren.get(a0);
 		if (status != null){
 			int numberOfBytesWritten = writeVirtualMemory(a1, Lib.bytesFromInt(status));
@@ -628,32 +645,42 @@ public class UserProcess {
 	 * join(). On error, returns -1.
 	 */
 	private int handleExec(int a0, int a1, int a2) {
-		int sizeOfInt = 4;
-		int error = -1;
+		debug("handleExec("+a0+","+a1+","+a2+")");
+		final int sizeOfInt = 4;
+		final int error = -1;
 		if (a0 < 0 || a1 < 0){
 			return error;
 		}
 			// method adds 1 to numBytes for max 256
-		String fileName = readVirtualMemoryString(a0, 255);
+		String fileName = readSZ(a0);
 		if (fileName == null || !fileName.endsWith(".coff")){
 			return error;
 		}
+		debug("argc="+a1);
 		String[] arguments = new String[a1];
 		int currentVaddr = a2;
-		for (int i = 0; i < a2; i++){
+		for (int i = 0; i < a1; i++) {
 			byte[] data = new byte[sizeOfInt];
-			int numberOfBytesXferd = readVirtualMemory(currentVaddr, data, 0, sizeOfInt);
-			if (numberOfBytesXferd != 4){
+			int numberOfBytesXferd = readVirtualMemory(currentVaddr, data);
+			if (numberOfBytesXferd != data.length){
 				return error;
 			}
-			String argument = readVirtualMemoryString(Lib.bytesToInt(data, 0),255);
-			if (argument == null){
-				return error;
+			int ptrArgv = Lib.bytesToInt(data, 0);
+			debug("&argc["+i+"]:= 0x"+Integer.toHexString(ptrArgv));
+			String argument = null;
+			if (0 != ptrArgv) {
+				argument = readSZ(ptrArgv);
+				// is this true?
+				if (argument == null){
+					return error;
+				}
 			}
+			debug("argc["+i+"]:="+argument);
 			arguments[i]=argument;
 			currentVaddr += sizeOfInt;
 		}
 		UserProcess child = new UserProcess();
+		debug("execte("+fileName+","+java.util.Arrays.toString(arguments)+")");
 		boolean executed = child.execute(fileName, arguments);
 		child.parentProcess = this;
 		children.add(child);
@@ -694,7 +721,12 @@ public class UserProcess {
 			parentProcess.instanceMutex.release();
 		}
 		unloadSections();
+		if (0 == pid) {
+			Machine.halt();
+		}
+		debug("calling finish()");
 		UThread.finish();
+		debug("bye!");
 	}
 
 	/**
@@ -710,7 +742,9 @@ public class UserProcess {
 
 	switch (cause) {
 	case Processor.exceptionSyscall:
-	    int result = handleSyscall(processor.readRegister(Processor.regV0),
+		int syscallNumber = processor.readRegister(Processor.regV0);
+		debug("UserProcess::handleException,SYSCALL("+syscallNumber+")");
+	    int result = handleSyscall(syscallNumber,
 				       processor.readRegister(Processor.regA0),
 				       processor.readRegister(Processor.regA1),
 				       processor.readRegister(Processor.regA2),
@@ -721,12 +755,135 @@ public class UserProcess {
 	    break;				       
 				       
 	default:
-	    Lib.debug(dbgProcess, "Unexpected exception: " +
-		      Processor.exceptionNames[cause]);
+	    debug("Unexpected exception: " + Processor.exceptionNames[cause]);
 	    Lib.assertNotReached("Unexpected exception");
 	}
     }
+    
+    public int getPid() {
+    	return pid;
+    }
+    
+    /**
+	 * Returns the zero terminated string starting at the provided address.
+	 * @param vaddr the starting address for the zero terminated string.
+	 * @return the zero-terminated String starting at the given address. 
+	 * @throws IllegalArgumentException if the address is out of bounds
+	 * or if we are unable to read from any byte therein.
+	 */
+	private String readSZ(int vaddr) {
+		if (!rangeCheckMemoryAccess(vaddr))
+		{
+			throw new IllegalArgumentException("bogus range");
+		}
+		StringBuilder sb = new StringBuilder();
+		byte[] data = new byte[1];
+		int offset = 0;
+		while (true) // scary, ain't it?
+		{
+			int strLength = readVirtualMemory(vaddr+offset, data);
+			if (strLength == 0)
+			{
+				throw new IllegalArgumentException(
+						"bogus read at "+vaddr+"+"+offset);
+			}
+			offset++;
+			if (0 == data[0])
+			{
+				break;
+			}
+			sb.append((char)data[0]);
+		}
+		return sb.toString();
+	}
 
+    /**
+     * Returns true iff the virtual address provided could be reasonable.
+     * N.B. this does not check to ensure the UserProcess has access to the
+     * memory, or any other semantic checks.
+     * @param vaddr the virtual address relative to this UserProcess
+     * @return true if the provided vaddr could be a valid address,
+     * false otherwise.
+     */
+    private boolean rangeCheckMemoryAccess(int vaddr) {
+		// TODO: better range checking
+    	final int maximumMemory = Processor.pageSize 
+								* Machine.processor().getNumPhysPages();
+		return (vaddr >= 0 || vaddr <= maximumMemory);
+	}
+
+    /**
+     * Ensures the provided file descriptor is a legitimate one for use by
+     * this UserProcess. This goes one step further 
+     * than {@link #rangeCheckFileDescriptor(int)} and actually checks to see
+     * if the file descriptor is non-null. 
+     * @param descriptorNumber the descriptor index which should be checked
+     * @return true iff the file descriptor at that index may safely be
+     * dereferenced.
+     */
+    private boolean checkForFileDescriptor(int descriptorNumber) {
+    	boolean fdOk = rangeCheckFileDescriptor(descriptorNumber);
+    	if (!fdOk)
+    	{
+    		return false;
+    	}
+    	// or whatever other exciting checks we want to include
+    	return this.fileDescriptors[descriptorNumber] != null;
+    }
+
+    /**
+     * Returns true iff the provided file descriptor index 
+     * is zero to {@link UserProcess.maxNumFiles} (inclusive). N.B. this method
+     * does not guarantee the file descriptor at that index is live (i.e. non-null).
+     * For that, {@link #checkForFileDescriptor(int)}.
+     * @see #checkForFileDescriptor(int)
+     * @param descriptorNumber the number of the entry in the file descriptor table
+     * @return true if that could be a valid file descriptor, false otherwise.
+     */
+    private boolean rangeCheckFileDescriptor(int descriptorNumber) {
+		return (descriptorNumber > 0 || 
+				descriptorNumber < this.fileDescriptors.length);
+	}
+    
+    private void debugHex(String title, byte[] data) {
+    	final int length = 72;
+    	final String EOL = System.getProperty("line.separator");
+    	StringBuilder sb = new StringBuilder();
+    	sb.append(title).append(EOL);
+    	sb.append("[data]").append(EOL);
+    	if (null == data)
+    	{
+    		sb.append("null");
+    	}
+    	else
+    	{
+    		int count = 0;
+    		for (int i = 0; i < data.length; i++)
+    		{
+    			int b = data[i] & 0xFF;
+    			if (b < 0x10)
+    			{
+    				sb.append('0');
+    			}
+    			sb.append(Integer.toHexString(b));
+    			sb.append(' ');
+    			count += 3;
+    			if (count + 3 > length)
+    			{
+    				count = 0;
+    				sb.append(EOL);
+    			}
+    		}
+    		sb.append(EOL);
+    	}
+    	sb.append("[end]").append(EOL);
+    	debug(sb.toString());
+    }
+    
+    private void debug(String msg) {
+    	Lib.debug(dbgProcess, "UserProcess("+pid+"):"+msg);
+    }
+    
     /** The program being run by this process. */
     protected Coff coff;
 
@@ -745,7 +902,7 @@ public class UserProcess {
     private int numOpenFiles = 0;
     private int pid = -1;
     private Map<Integer, Integer> terminatedChildren = new HashMap<Integer, Integer>();
-    private UserProcess parentProcess = null;
+    private UserProcess parentProcess;
 	private List<UserProcess> children = new ArrayList<UserProcess>();
 	private Lock instanceMutex = new Lock();
 	private Condition2 joinCondition = new Condition2(instanceMutex);
