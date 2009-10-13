@@ -5,6 +5,10 @@ import nachos.threads.*;
 import nachos.userprog.*;
 
 import java.io.EOFException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Encapsulates the state of a user process that is not contained in its
@@ -328,6 +332,8 @@ public class UserProcess {
      * Release any resources allocated by <tt>loadSections()</tt>.
      */
     protected void unloadSections() {
+    	//  TODO implement me
+    	
     }    
 
     /**
@@ -362,7 +368,8 @@ public class UserProcess {
 	
     		Lib.assertNotReached("Machine.halt() did not halt machine!");
     	}
-    	return -1;
+    	// silently fail
+    	return 0;
     }
 
 
@@ -411,7 +418,8 @@ public class UserProcess {
 	case syscallHalt:
 	    return handleHalt();
 	case syscallExit:
-	    return handleExit(a0);
+	    handleExit(a0);
+	    break;
 	case syscallExec:
 	    return handleExec(a0,a1,a2);
 	case syscallJoin:
@@ -544,32 +552,149 @@ public class UserProcess {
 		}
 		return fd;
 	}
-
+	
+	/**
+	 * Suspend execution of the current process until the child process specified
+	 * by the processID argument has exited. If the child has already exited by the
+	 * time of the call, returns immediately. When the current process resumes, it
+	 * disowns the child process, so that join() cannot be used on that process
+	 * again.
+	 *
+	 * processID is the process ID of the child process, returned by exec().
+	 *
+	 * status points to an integer where the exit status of the child process will
+	 * be stored. This is the value the child passed to exit(). If the child exited
+	 * because of an unhandled exception, the value stored is not defined.
+	 *
+	 * If the child exited normally, returns 1. If the child exited as a result of
+	 * an unhandled exception, returns 0. If processID does not refer to a child
+	 * process of the current process, returns -1.
+	 */
 	private int handleJoin(int a0, int a1) {
-		// TODO Auto-generated method stub
-		return 0;
+		instanceMutex.acquire();
+		int index = -1;
+		for (int i= 0; i < children.size() ;i++){
+			UserProcess child =children.get(i);
+			if (child.pid == a0){
+				index = i;
+				break;
+			}
+		}
+		if (index == -1){
+			instanceMutex.release();
+			return index;
+		}else{
+			children.remove(index);
+		}
+		if (!terminatedChildren.containsKey(a0)){
+			waitingToJoin = a0;
+			joinCondition.sleep();
+		}
+		int sizeOfInt = 4;
+		Integer status = terminatedChildren.get(a0);
+		if (status != null){
+			int numberOfBytesWritten = writeVirtualMemory(a1, Lib.bytesFromInt(status));
+			if (numberOfBytesWritten != sizeOfInt){
+				instanceMutex.release();
+				return -1;
+			}
+		}
+		instanceMutex.release();
+		if (status != null && status.equals(0)){
+			return 1;
+		}else{
+			return 0;
+		}
 	}
 
+	/**
+	 * Execute the program stored in the specified file, with the specified
+	 * arguments, in a new child process. The child process has a new unique
+	 * process ID, and starts with stdin opened as file descriptor 0, and stdout
+	 * opened as file descriptor 1.
+	 *
+	 * file is a null-terminated string that specifies the name of the file
+	 * containing the executable. Note that this string must include the ".coff"
+	 * extension.
+	 *
+	 * argc specifies the number of arguments to pass to the child process. This
+	 * number must be non-negative.
+	 *
+	 * argv is an array of pointers to null-terminated strings that represent the
+	 * arguments to pass to the child process. argv[0] points to the first
+	 * argument, and argv[argc-1] points to the last argument.
+	 *
+	 * exec() returns the child process's process ID, which can be passed to
+	 * join(). On error, returns -1.
+	 */
 	private int handleExec(int a0, int a1, int a2) {
+		int sizeOfInt = 4;
+		int error = -1;
 		if (a0 < 0 || a1 < 0){
-			return -1;
+			return error;
 		}
 			// method adds 1 to numBytes for max 256
-		String fileName = this.readVirtualMemoryString(a0, 255);
+		String fileName = readVirtualMemoryString(a0, 255);
 		if (fileName == null || !fileName.endsWith(".coff")){
-			return -1;
+			return error;
 		}
 		String[] arguments = new String[a1];
-		// TODO read arguments from virtual memory
+		int currentVaddr = a2;
+		for (int i = 0; i < a2; i++){
+			byte[] data = new byte[sizeOfInt];
+			int numberOfBytesXferd = readVirtualMemory(currentVaddr, data, 0, sizeOfInt);
+			if (numberOfBytesXferd != 4){
+				return error;
+			}
+			String argument = readVirtualMemoryString(Lib.bytesToInt(data, 0),255);
+			if (argument == null){
+				return error;
+			}
+			arguments[i]=argument;
+			currentVaddr += sizeOfInt;
+		}
 		UserProcess child = new UserProcess();
 		boolean executed = child.execute(fileName, arguments);
-		child.parentPid = this.pid;
-		return (executed)? child.pid : -1;
+		child.parentProcess = this;
+		children.add(child);
+		return (executed)? child.pid : error;
 	}
-
-	private int handleExit(int a0) {
-		// TODO Auto-generated method stub
-		return 0;
+	
+	/**
+	 * Terminate the current process immediately. Any open file descriptors
+	 * belonging to the process are closed. Any children of the process no longer
+	 * have a parent process.
+	 *
+	 * status is returned to the parent process as this process's exit status and
+	 * can be collected using the join syscall. A process exiting normally should
+	 * (but is not required to) set status to 0.
+	 *
+	 * exit() never returns.
+	 */
+	private void handleExit(int a0) {
+		for (int i = 0; i < maxNumFiles; i++){
+			if (fileDescriptors[i] != null){
+				fileDescriptors[i].close();
+				fileDescriptors[i] = null;
+				filePositions[i] = -1;
+				numOpenFiles--;
+			}
+		}
+		Lib.assertTrue(numOpenFiles == 0, "Something's awry with the files");
+		
+		for (UserProcess child : children){
+			child.parentProcess = null;
+		}
+		if (parentProcess != null){
+			parentProcess.instanceMutex.acquire();
+			parentProcess.terminatedChildren.put(this.pid, a0);
+			if (parentProcess.waitingToJoin == this.pid){
+				parentProcess.joinCondition.wake();
+			}
+			parentProcess.instanceMutex.release();
+		}
+		unloadSections();
+		UThread.finish();
 	}
 
 	/**
@@ -618,9 +743,13 @@ public class UserProcess {
     private OpenFile[] fileDescriptors;
     private int[] filePositions;
     private int numOpenFiles = 0;
-    private int pid;
-    private int parentPid;
-	
+    private int pid = -1;
+    private Map<Integer, Integer> terminatedChildren = new HashMap<Integer, Integer>();
+    private UserProcess parentProcess = null;
+	private List<UserProcess> children = new ArrayList<UserProcess>();
+	private Lock instanceMutex = new Lock();
+	private Condition2 joinCondition = new Condition2(instanceMutex);
+	private int waitingToJoin;
     private static final int pageSize = Processor.pageSize;
     private static final char dbgProcess = 'a';
     private static final int maxNumFiles = 16;
