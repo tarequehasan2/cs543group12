@@ -463,15 +463,22 @@ public class UserProcess {
     }
 
     private int handleUnlink(int a0) {
-		String filename = readSZ(a0);
-		FileSystem fs = Machine.stubFileSystem();
-		boolean status = fs.remove(filename);
-		if (status){
-			return 0;
-		}
-		else{
-			return -1;	
-		}
+    	int returnStatus;
+    	try {
+    		String filename = readSZ(a0);
+    		FileSystem fs = Machine.stubFileSystem();
+    		boolean status = fs.remove(filename);
+    		if (status){
+    			returnStatus = 0;
+    		}
+    		else{
+    			returnStatus = -1;	
+    		}
+    	}
+    	catch (Exception ex) {
+    		returnStatus = -1;
+    	}
+    	return returnStatus;
 	}
 
 	private int handleClose(int a0) {
