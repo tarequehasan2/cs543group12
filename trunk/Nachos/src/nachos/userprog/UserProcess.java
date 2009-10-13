@@ -266,7 +266,7 @@ public class UserProcess {
 	for (int i=0; i<args.length; i++) {
 	    argv[i] = args[i].getBytes();
 	    // 4 bytes for argv[] pointer; then string plus one for null byte
-	    argsSize += 4 + argv[i].length + 1;
+	    argsSize += (SIZEOF_INT + argv[i].length + 1);
 	}
 	if (argsSize > pageSize) {
 	    coff.close();
@@ -289,15 +289,15 @@ public class UserProcess {
 
 	// store arguments in last page
 	int entryOffset = (numPages-1)*pageSize;
-	int stringOffset = entryOffset + args.length*4;
+	int stringOffset = entryOffset + args.length * SIZEOF_INT;
 
 	this.argc = args.length;
 	this.argv = entryOffset;
 	
 	for (int i=0; i<argv.length; i++) {
 	    byte[] stringOffsetBytes = Lib.bytesFromInt(stringOffset);
-	    Lib.assertTrue(writeVirtualMemory(entryOffset,stringOffsetBytes) == 4);
-	    entryOffset += 4;
+	    Lib.assertTrue(writeVirtualMemory(entryOffset,stringOffsetBytes) == SIZEOF_INT);
+	    entryOffset += SIZEOF_INT;
 	    Lib.assertTrue(writeVirtualMemory(stringOffset, argv[i]) ==
 		       argv[i].length);
 	    stringOffset += argv[i].length;
@@ -465,7 +465,7 @@ public class UserProcess {
     private int handleUnlink(int a0) {
     	int returnStatus;
     	try {
-    		String filename = readSZ(a0);
+    		String filename = readVirtualMemoryString(a0, MAX_STRING_LENGTH);
     		FileSystem fs = Machine.stubFileSystem();
     		boolean status = fs.remove(filename);
     		if (status){
@@ -517,7 +517,7 @@ public class UserProcess {
 		{
 			if (numOpenFiles < maxNumFiles)
 			{
-				String filename = readSZ(a0);
+				String filename = readVirtualMemoryString(a0, MAX_STRING_LENGTH);
 				FileSystem fs = Machine.stubFileSystem();
 				boolean createOnOpen = false;
 				OpenFile file = fs.open(filename, createOnOpen);
@@ -550,13 +550,8 @@ public class UserProcess {
 		{
 			if (numOpenFiles < maxNumFiles)
 			{
-				String filename;
-				try 
-				{
-					filename = readSZ(a0);
-				}
-				catch (IllegalArgumentException iae)
-				{
+				String filename = readVirtualMemoryString(a0, MAX_STRING_LENGTH);
+				if (null == filename || 0 == filename.length()) {
 					return -1;
 				}
 				FileSystem fs = Machine.stubFileSystem();
@@ -621,11 +616,10 @@ public class UserProcess {
 			waitingToJoin = a0;
 			joinCondition.sleep();
 		}
-		final int sizeOfInt = 4;
 		Integer status = terminatedChildren.get(a0);
 		if (status != null){
 			int numberOfBytesWritten = writeVirtualMemory(a1, Lib.bytesFromInt(status));
-			if (numberOfBytesWritten != sizeOfInt){
+			if (numberOfBytesWritten != SIZEOF_INT){
 				instanceMutex.release();
 				return -1;
 			}
@@ -660,13 +654,12 @@ public class UserProcess {
 	 */
 	private int handleExec(int a0, int a1, int a2) {
 		debug("handleExec("+a0+","+a1+","+a2+")");
-		final int sizeOfInt = 4;
 		final int error = -1;
 		if (a0 < 0 || a1 < 0){
 			return error;
 		}
 			// method adds 1 to numBytes for max 256
-		String fileName = readSZ(a0);
+		String fileName = readVirtualMemoryString(a0, MAX_STRING_LENGTH);
 		if (fileName == null || !fileName.endsWith(".coff")){
 			return error;
 		}
@@ -674,7 +667,7 @@ public class UserProcess {
 		String[] arguments = new String[a1];
 		int currentVaddr = a2;
 		for (int i = 0; i < a1; i++) {
-			byte[] data = new byte[sizeOfInt];
+			byte[] data = new byte[SIZEOF_INT];
 			int numberOfBytesXferd = readVirtualMemory(currentVaddr, data);
 			if (numberOfBytesXferd != data.length){
 				return error;
@@ -683,7 +676,7 @@ public class UserProcess {
 			debug("&argc["+i+"]:= 0x"+Integer.toHexString(ptrArgv));
 			String argument = null;
 			if (0 != ptrArgv) {
-				argument = readSZ(ptrArgv);
+				argument = readVirtualMemoryString(ptrArgv, MAX_STRING_LENGTH);
 				// is this true?
 				if (argument == null){
 					return error;
@@ -691,7 +684,7 @@ public class UserProcess {
 			}
 			debug("argc["+i+"]:="+argument);
 			arguments[i]=argument;
-			currentVaddr += sizeOfInt;
+			currentVaddr += SIZEOF_INT;
 		}
 		UserProcess child = new UserProcess();
 		debug("execte("+fileName+","+java.util.Arrays.toString(arguments)+")");
@@ -778,39 +771,6 @@ public class UserProcess {
     	return pid;
     }
     
-    /**
-	 * Returns the zero terminated string starting at the provided address.
-	 * @param vaddr the starting address for the zero terminated string.
-	 * @return the zero-terminated String starting at the given address. 
-	 * @throws IllegalArgumentException if the address is out of bounds
-	 * or if we are unable to read from any byte therein.
-	 */
-	private String readSZ(int vaddr) {
-		if (!rangeCheckMemoryAccess(vaddr))
-		{
-			throw new IllegalArgumentException("bogus range");
-		}
-		StringBuilder sb = new StringBuilder();
-		byte[] data = new byte[1];
-		int offset = 0;
-		while (true) // scary, ain't it?
-		{
-			int strLength = readVirtualMemory(vaddr+offset, data);
-			if (strLength == 0)
-			{
-				throw new IllegalArgumentException(
-						"bogus read at "+vaddr+"+"+offset);
-			}
-			offset++;
-			if (0 == data[0])
-			{
-				break;
-			}
-			sb.append((char)data[0]);
-		}
-		return sb.toString();
-	}
-
     /**
      * Returns true iff the virtual address provided could be reasonable.
      * N.B. this does not check to ensure the UserProcess has access to the
@@ -915,15 +875,32 @@ public class UserProcess {
     private int[] filePositions;
     private int numOpenFiles = 0;
     private int pid = -1;
+    /**
+     * Maps the process id of the terminated children
+     * to their returned status code.
+     */
     private Map<Integer, Integer> terminatedChildren = new HashMap<Integer, Integer>();
     private UserProcess parentProcess;
 	private List<UserProcess> children = new ArrayList<UserProcess>();
 	private Lock instanceMutex = new Lock();
 	private Condition2 joinCondition = new Condition2(instanceMutex);
+	/**
+	 * Contains the PID of the child upon which we are waiting in handleJoin().
+	 */
 	private int waitingToJoin;
     private static final int pageSize = Processor.pageSize;
     private static final char dbgProcess = 'a';
     private static final int maxNumFiles = 16;
+    /**
+     * Maintains the global PID counter,
+     * which is protected by <tt>mutex</tt>.
+     */
     private static int currentPID = 0;
     private static Lock mutex = new Lock();
+    /**
+     * Contains the maximum string length for a syscall.
+     * As specified in the project 2 assignment, part 1.
+     */
+	private static final int MAX_STRING_LENGTH = 256;
+	private static final int SIZEOF_INT = 4;
 }
