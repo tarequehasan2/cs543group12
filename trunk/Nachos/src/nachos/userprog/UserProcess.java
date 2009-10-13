@@ -463,8 +463,15 @@ public class UserProcess {
     }
 
     private int handleUnlink(int a0) {
-		// TODO Auto-generated method stub
-		return -1;
+		String filename = readSZ(a0);
+		FileSystem fs = Machine.stubFileSystem();
+		boolean status = fs.remove(filename);
+		if (status){
+			return 0;
+		}
+		else{
+			return -1;	
+		}
 	}
 
 	private int handleClose(int a0) {
