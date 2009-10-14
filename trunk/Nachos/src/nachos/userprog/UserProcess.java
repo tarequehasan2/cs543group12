@@ -502,15 +502,69 @@ public class UserProcess {
 		return status;
 	}
 	
-	private int handleWrite(int a0, int a1, int a2) {
-		// TODO Auto-generated method stub
-		return -1;
-	}
-
-	private int handleRead(int a0, int a1, int a2) {
-		// TODO Auto-generated method stub
-		return -1;
-	}
+	/**
+	 * Writes the number of bytes in <tt>a2</tt> 
+	 * located at <em>memory(<tt>a1</tt>)</em> to the stream identified
+	 * by <tt>a0</tt>.
+	 * @param a0 the file descriptor to which we should write.
+	 * @param a1 the memory address from which to source the data.
+	 * @param a2 the number of bytes to write.
+	 * @return the number of bytes successfully written, zero if nothing was
+	 * written and -1 if unable to process the request.
+	 */
+ 	private int handleWrite(int a0, int a1, int a2) {
+		debug("handleWrite("+a0+","+a1+","+a2+")");
+		if (!rangeCheckMemoryAccess(a2)) {
+			return -1;
+		}
+		byte[] data = new byte[a2];
+		int strLength = readVirtualMemory(a1, data);
+		if (strLength < 0) {
+			return -1;
+		}
+		debugHex("write-data", data);
+		debug("write("+new String(data)+")");
+		if (!checkForFileDescriptor(a0)) {
+			return -1;
+		}
+		OpenFile outputFile = this.fileDescriptors[a0];
+		if (null == outputFile) {
+			// TODO: perror()?
+			return -1;
+		}
+		return outputFile.write(data, 0, data.length);
+ 	}
+ 
+	/**
+	 * Reads the number of bytes in <tt>a2</tt> 
+	 * located at <em>memory(<tt>a1</tt>)</em> from the stream identified
+	 * by <tt>a0</tt>.
+	 * @param a0 the file descriptor from which we should read.
+	 * @param a1 the memory address to which to store the data.
+	 * @param a2 the number of bytes to write.
+	 * @return the number of bytes successfully read, zero if nothing was
+	 * read and -1 if unable to process the request.
+	 */
+ 	private int handleRead(int a0, int a1, int a2) {
+		debug("handleRead("+a0+","+a1+","+a2+")");
+		if (!rangeCheckMemoryAccess(a2)) {
+			return -1;
+		}
+		byte[] data = new byte[a2];
+		if (!checkForFileDescriptor(a0)) {
+			return -1;
+		}
+		OpenFile inputFile = this.fileDescriptors[a0];
+		if (null == inputFile) {
+			return -1;
+		}
+		int bytesRead = inputFile.read(data, 0, data.length);
+		// TODO: do we care about zero reads?
+		if (-1 == bytesRead) {
+			return -1;
+		}
+		return writeVirtualMemory(a1, data, 0, bytesRead);
+ 	}
 
 	private int handleOpen(int a0) {
 		debug("handleOpen("+a0+")");
