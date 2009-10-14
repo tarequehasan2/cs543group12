@@ -1,5 +1,10 @@
 package nachos.userprog;
 
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.LinkedList;
+import java.util.List;
+
 import nachos.machine.*;
 import nachos.threads.*;
 import nachos.userprog.*;
@@ -21,7 +26,8 @@ public class UserKernel extends ThreadedKernel {
      */
     public void initialize(String[] args) {
 	super.initialize(args);
-
+	mutex = new Lock();
+	initializePageTable();
 	console = new SynchConsole(Machine.console());
 	
 	Machine.processor().setExceptionHandler(new Runnable() {
@@ -106,10 +112,47 @@ public class UserKernel extends ThreadedKernel {
     public void terminate() {
 	super.terminate();
     }
+    
+    
+    private void initializePageTable(){
+    	mutex.acquire();
+    		for(int i=0; i<Machine.processor().getNumPhysPages(); i++){
+    			freePages.add(i);
+    		}
+    	mutex.release();
+    	
+    }
+    
+    public static List<Integer> getFreePages(int numberNeeded){
+    	mutex.acquire();
+    		if (freePages.size() < numberNeeded){
+    			mutex.release();
+    			return null;
+    		}
+    	List<Integer> pages = new ArrayList<Integer>();
+    		for (int i =0; i<numberNeeded; i++){
+    			pages.add(freePages.removeFirst());
+    		}
+    	mutex.release();
+    	return pages;
+    	
+    }
+    
+    public static void releasePages(List<Integer> pages){
+    	mutex.acquire();
+    		for (Integer page: pages){
+    			freePages.addLast(page);
+    		}
+    	mutex.release();
+    }
+    
 
     /** Globally accessible reference to the synchronized console. */
     public static SynchConsole console;
 
     // dummy variables to make javac smarter
     private static Coff dummy1 = null;
+    
+    private static Deque<Integer> freePages = new LinkedList<Integer>();
+    private static Lock mutex;
 }
