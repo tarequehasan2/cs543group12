@@ -372,15 +372,9 @@ public class UserProcess {
      */
     protected void unloadSections() {
         int startOfStack = 0;
-        boolean valid = true;
-        boolean used = false;
-        boolean dirty = false;
 	    List<Integer> toBeFreed = new ArrayList<Integer>();
         for (int s=0; s<coff.getNumSections(); s++) {
     	    CoffSection section = coff.getSection(s);
-    	    boolean readOnly = section.isReadOnly();
-    	    debug( "\tinitializing " + section.getName()
-    		      + " section (" + section.getLength() + " pages)");
     	    for (int i=0; i<section.getLength(); i++) {
     	    	int vpn = section.getFirstVPN()+i;
     			toBeFreed.add(pageTable[vpn].ppn);
