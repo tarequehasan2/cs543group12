@@ -44,16 +44,17 @@ public class UserProcess {
 	for (int i = 0; i < maxNumFiles; i++) {
 		filePositions[i] = -1;
 	}
-	for (int i=0; i<numPhysPages; i++)
-	{
-	    int vpn = i;
-	    int ppn = i;
-	    boolean valid = true;
-	    boolean readOnly = false;
-	    boolean used = false;
-	    boolean dirty = false;
-		pageTable[vpn] = new TranslationEntry(vpn, ppn, valid, readOnly, used, dirty);
-	}
+// Moved to loadsections - jnz
+//	for (int i=0; i<numPhysPages; i++)
+//	{
+//	    int vpn = i;
+//	    int ppn = i;
+//	    boolean valid = true;
+//	    boolean readOnly = false;
+//	    boolean used = false;
+//	    boolean dirty = false;
+//		pageTable[vpn] = new TranslationEntry(vpn, ppn, valid, readOnly, used, dirty);
+//	}
 	mutex.acquire();
 	pid = currentPID;
 	currentPID++;
@@ -325,26 +326,43 @@ public class UserProcess {
      * @return	<tt>true</tt> if the sections were successfully loaded.
      */
     protected boolean loadSections() {
-	if (numPages > Machine.processor().getNumPhysPages()) {
-	    coff.close();
-	    debug( "\tinsufficient physical memory");
-	    return false;
-	}
-
+//	if (numPages > Machine.processor().getNumPhysPages()) {
+//	    coff.close();
+//	    debug( "\tinsufficient physical memory");
+//	    return false;
+//	}
+    List<Integer> allocatedPages = UserKernel.getFreePages(numPages);
+    if (allocatedPages == null){
+    	coff.close();
+    	debug("\tinsufficient physical memory");
+    	return false;
+    }
+    
 	// load sections
+    int startOfStack = 0;
+    boolean valid = true;
+    boolean used = false;
+    boolean dirty = false;
 	for (int s=0; s<coff.getNumSections(); s++) {
 	    CoffSection section = coff.getSection(s);
-	    
+	    boolean readOnly = section.isReadOnly();
 	    debug( "\tinitializing " + section.getName()
 		      + " section (" + section.getLength() + " pages)");
-
 	    for (int i=0; i<section.getLength(); i++) {
-		int vpn = section.getFirstVPN()+i;
-
-		// for now, just assume virtual addresses=physical addresses
-		section.loadPage(i, vpn);
+	    	int vpn = section.getFirstVPN()+i;
+		    int ppn = allocatedPages.get(i);
+			pageTable[vpn] = new TranslationEntry(vpn, ppn, valid, readOnly, used, dirty);
+			section.loadPage(i, ppn);
+			startOfStack++;
 	    }
+	    
 	}
+	boolean readOnly = true;
+	for (int i = startOfStack; i < numPages; i++ ){
+		pageTable[i] = new TranslationEntry(i, allocatedPages.get(i), valid, readOnly, used, dirty);
+   }
+	
+	
 	
 	return true;
     }
@@ -353,9 +371,37 @@ public class UserProcess {
      * Release any resources allocated by <tt>loadSections()</tt>.
      */
     protected void unloadSections() {
-    	//  TODO implement me
-    	
-    }    
+        int startOfStack = 0;
+        boolean valid = true;
+        boolean used = false;
+        boolean dirty = false;
+	    List<Integer> toBeFreed = new ArrayList<Integer>();
+        for (int s=0; s<coff.getNumSections(); s++) {
+    	    CoffSection section = coff.getSection(s);
+    	    boolean readOnly = section.isReadOnly();
+    	    debug( "\tinitializing " + section.getName()
+    		      + " section (" + section.getLength() + " pages)");
+    	    for (int i=0; i<section.getLength(); i++) {
+    	    	int vpn = section.getFirstVPN()+i;
+    			toBeFreed.add(pageTable[vpn].ppn);
+                pageTable[vpn].readOnly = false;
+                pageTable[vpn].valid = false;
+                pageTable[vpn].dirty = false;
+                pageTable[vpn].used  = false;
+                startOfStack++;
+    	    }
+    	    
+    	}
+    	for (int i = startOfStack; i < numPages; i++ ){
+   			toBeFreed.add(pageTable[i].ppn);
+            pageTable[i].readOnly = false;
+            pageTable[i].valid = false;
+            pageTable[i].dirty = false;
+            pageTable[i].used  = false;
+    	}
+    	UserKernel.releasePages(toBeFreed);
+    	  	
+      }    
 
     /**
      * Initialize the processor's registers in preparation for running the
@@ -763,12 +809,7 @@ public class UserProcess {
 	 */
 	private void handleExit(int a0) {
 		for (int i = 0; i < maxNumFiles; i++){
-			if (fileDescriptors[i] != null){
-				fileDescriptors[i].close();
-				fileDescriptors[i] = null;
-				filePositions[i] = -1;
-				numOpenFiles--;
-			}
+			handleClose(i);
 		}
 		Lib.assertTrue(numOpenFiles == 0, "Something's awry with the files");
 		
