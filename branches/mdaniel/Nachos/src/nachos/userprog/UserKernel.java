@@ -1,5 +1,7 @@
 package nachos.userprog;
 
+import java.util.LinkedList;
+
 import nachos.machine.*;
 import nachos.threads.*;
 import nachos.userprog.*;
@@ -24,15 +26,27 @@ public class UserKernel extends ThreadedKernel {
 
 	console = new SynchConsole(Machine.console());
 	
-	Machine.processor().setExceptionHandler(new Runnable() {
+	Processor proc = Machine.processor();
+	proc.setExceptionHandler(new Runnable() {
 		public void run() { exceptionHandler(); }
 	    });
+
+	freePagesL = new Lock();
+	int pages = proc.getNumPhysPages();
+	for (int i = 0; i < pages; i++) {
+		// initialize is called before anything else is running, so
+		// no need to lock the freePages list at this point
+		freePages.add(i);
+	}
     }
 
     /**
      * Test the console device.
      */	
     public void selfTest() {
+    }
+    
+    public void selfTest1() {
 	super.selfTest();
 
 	System.out.println("Testing the console device. Typed characters");
@@ -97,7 +111,7 @@ public class UserKernel extends ThreadedKernel {
 	String shellProgram = Machine.getShellProgramName();	
 	Lib.assertTrue(process.execute(shellProgram, new String[] { }));
 
-	KThread.currentThread().finish();
+	KThread.finish();
     }
 
     /**
@@ -106,10 +120,38 @@ public class UserKernel extends ThreadedKernel {
     public void terminate() {
 	super.terminate();
     }
+    
+    int[] malloc(int numPages) {
+    	int[] result;
+    	freePagesL.acquire();
+    	if (numPages > freePages.size()) {
+    		return null;
+    	}
+    	result = new int[numPages];
+    	for (int i = result.length - 1; i >= 0; i--) {
+    		// use removeLast to expose pageTable errors
+    		// but malloc them in reverse order 
+    		// so the request for contiguous memory is honored
+    		result[i] = freePages.removeLast();
+    	}
+    	freePagesL.release();
+    	return result;
+    }
+    
+    void free(int page) {
+    	freePagesL.acquire();
+    	freePages.add(page);
+    	freePagesL.release();
+    }
 
     /** Globally accessible reference to the synchronized console. */
     public static SynchConsole console;
 
     // dummy variables to make javac smarter
     private static Coff dummy1 = null;
+    // don't initialize it statically, 
+    // since Lock needs the KThread system to be running
+    private static Lock freePagesL; 
+    private static LinkedList<Integer> freePages
+    	= new LinkedList<Integer>();
 }
