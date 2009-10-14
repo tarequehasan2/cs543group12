@@ -627,10 +627,10 @@ public class UserProcess {
 			}
 		}
 		instanceMutex.release();
-		if (status != null && status.equals(0)){
-			return 1;
-		}else{
+		if (status != null && status.equals(-1)){
 			return 0;
+		}else{
+			return 1;
 		}
 	}
 
@@ -770,6 +770,7 @@ public class UserProcess {
 				       
 	default:
 	    debug("Unexpected exception: " + Processor.exceptionNames[cause]);
+	    handleExit(-1);
 	    Lib.assertNotReached("Unexpected exception");
 	}
     }
