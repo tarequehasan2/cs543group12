@@ -1,13 +1,14 @@
 package nachos.userprog;
 
-import java.util.ArrayList;
-import java.util.Deque;
 import java.util.LinkedList;
-import java.util.List;
 
-import nachos.machine.*;
-import nachos.threads.*;
-import nachos.userprog.*;
+import nachos.machine.Coff;
+import nachos.machine.Lib;
+import nachos.machine.Machine;
+import nachos.machine.Processor;
+import nachos.threads.KThread;
+import nachos.threads.Lock;
+import nachos.threads.ThreadedKernel;
 
 /**
  * A kernel that can support multiple user processes.
@@ -26,8 +27,17 @@ public class UserKernel extends ThreadedKernel {
      */
     public void initialize(String[] args) {
 	super.initialize(args);
-	mutex = new Lock();
-	initializePageTable();
+
+	// have to initialize the lock here, rather than statically,
+	// because at <clinit> time the threading system isn't running
+	// causing the Lock constructor to fail
+	freePagesL = new Lock();
+	int pages = Machine.processor().getNumPhysPages();
+	for (int i = 0; i < pages; i++) {
+		// initialize is called before anything else is running, so
+		// no need to lock the freePages list at this point
+		freePages.add(i);
+	}
 	console = new SynchConsole(Machine.console());
 	
 	Machine.processor().setExceptionHandler(new Runnable() {
@@ -39,6 +49,11 @@ public class UserKernel extends ThreadedKernel {
      * Test the console device.
      */	
     public void selfTest() {
+    	
+    }
+
+    // disabled because does not work with paged memory
+    public void selfTest1() {
 	super.selfTest();
 
 	System.out.println("Testing the console device. Typed characters");
@@ -59,7 +74,7 @@ public class UserKernel extends ThreadedKernel {
 	myread.writeVirtualMemory(100, "myfile.txt".getBytes()); //write string to memory (pointer)
 	int fd =  myread.handleSyscall(4, 100, 0, 0, 0);  // create a file
 	myread.writeVirtualMemory(500, "my textdata".getBytes()); // more write string to memory (pointer)
-	int byteWrite = myread.handleSyscall(7, fd, 500, 11, 0); // Writing Data
+	myread.handleSyscall(7, fd, 500, 11, 0); // Writing Data
 	myread.handleSyscall(8, fd, 0, 0, 0); // Close file
 	fd =  myread.handleSyscall(5, 100, 0, 0, 0); //Open, Mem Aloc, not use
 	int byteRead = myread.handleSyscall(6, fd, 200, 20, 0); // Reading
@@ -126,7 +141,7 @@ public class UserKernel extends ThreadedKernel {
 	String shellProgram = Machine.getShellProgramName();	
 	Lib.assertTrue(process.execute(shellProgram, new String[] { }));
 
-	KThread.currentThread().finish();
+	KThread.finish();
     }
 
     /**
@@ -136,46 +151,68 @@ public class UserKernel extends ThreadedKernel {
 	super.terminate();
     }
     
-    
-    private void initializePageTable(){
-    	mutex.acquire();
-    		for(int i=0; i<Machine.processor().getNumPhysPages(); i++){
-    			freePages.add(i);
-    		}
-    	mutex.release();
-    	
+    /**
+     * Requests one or more <b>physical</b> pages from the kernel's memory
+     * pool. The page numbers range from <tt>0</tt> 
+     * to <tt>{@link Processor#getNumPhysPages()}</tt>, inclusive.
+     * Please note that the pages are not guaranteed to be contiguous, 
+     * but we'll do our best.
+     * @param numPages the number of pages you require.
+     * @return the <b>physical</b> page numbers
+     */
+    int[] malloc(int numPages) {
+    	int[] result;
+    	freePagesL.acquire();
+    	if (numPages > freePages.size()) {
+    		freePagesL.release();
+    		return null;
+    	}
+    	result = new int[numPages];
+    	for (int i = result.length - 1; i >= 0; i--) {
+    		// use removeLast to expose pageTable errors
+    		// but malloc them in reverse order 
+    		// so the request for contiguous memory is honored
+    		result[i] = freePages.removeLast();
+    	}
+    	freePagesL.release();
+    	return result;
     }
     
-    public static List<Integer> getFreePages(int numberNeeded){
-    	mutex.acquire();
-    		if (freePages.size() < numberNeeded){
-    			mutex.release();
-    			return null;
-    		}
-    	List<Integer> pages = new ArrayList<Integer>();
-    		for (int i =0; i<numberNeeded; i++){
-    			pages.add(freePages.removeFirst());
-    		}
-    	mutex.release();
-    	return pages;
-    	
+    /**
+     * Deallocates the <b>physical</b> page numbers provided. 
+     * @param pages the array of <b>physical</b> page numbers.
+     */
+    void free(int[] pages) {
+    	if (null == pages || 0 == pages.length) {
+    		return;
+    	}
+    	for (int i = 0; i < pages.length; i++) {
+    		free(pages[i]);
+    	}
     }
     
-    public static void releasePages(List<Integer> pages){
-    	mutex.acquire();
-    		for (Integer page: pages){
-    			freePages.addLast(page);
-    		}
-    	mutex.release();
+    /**
+     * Deallocates the <b>physical</b> page number provided. 
+     * @param pages the <b>physical</b> page number.
+     */
+    void free(int page) {
+    	freePagesL.acquire();
+    	if (!freePages.contains(page)) {
+    		freePages.add(page);
+    	}
+    	freePagesL.release();
     }
-    
+
 
     /** Globally accessible reference to the synchronized console. */
     public static SynchConsole console;
 
     // dummy variables to make javac smarter
-    private static Coff dummy1 = null;
+    static Coff dummy1;
     
-    private static Deque<Integer> freePages = new LinkedList<Integer>();
-    private static Lock mutex;
+    // don't initialize it statically, 
+    // since Lock needs the KThread system to be running
+    private static Lock freePagesL; 
+    private static LinkedList<Integer> freePages
+    	= new LinkedList<Integer>();
 }

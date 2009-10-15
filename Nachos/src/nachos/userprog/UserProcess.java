@@ -36,28 +36,12 @@ public class UserProcess {
      * Allocate a new process.
      */
     public UserProcess() {
-	int numPhysPages = Machine.processor().getNumPhysPages();
-	pageTable = new TranslationEntry[numPhysPages];
 	fileDescriptors = new OpenFile[maxNumFiles];
 	filePositions = new int[maxNumFiles];
-	
-	// Lib.enableDebugFlags("a");  // enabling debug
-		
 	// set our current file position to "not open"
 	for (int i = 0; i < maxNumFiles; i++) {
 		filePositions[i] = -1;
 	}
-// Moved to loadsections - jnz
-//	for (int i=0; i<numPhysPages; i++)
-//	{
-//	    int vpn = i;
-//	    int ppn = i;
-//	    boolean valid = true;
-//	    boolean readOnly = false;
-//	    boolean used = false;
-//	    boolean dirty = false;
-//		pageTable[vpn] = new TranslationEntry(vpn, ppn, valid, readOnly, used, dirty);
-//	}
 	mutex.acquire();
 	pid = currentPID;
 	currentPID++;
@@ -171,14 +155,14 @@ public class UserProcess {
 				 int length) {
 	Lib.assertTrue(offset >= 0 && length >= 0 && offset+length <= data.length);
 
-	byte[] memory = Machine.processor().getMemory();
+	int paddr = convertVaddrToPaddr(vaddr);
+	if (-1 == paddr) {
+		return 0;
+	}
 	
-	// for now, just assume that virtual addresses equal physical addresses
-	if (vaddr < 0 || vaddr >= memory.length)
-	    return 0;
-
-	int amount = Math.min(length, memory.length-vaddr);
-	System.arraycopy(memory, vaddr, data, offset, amount);
+	byte[] memory = Machine.processor().getMemory();
+	int amount = Math.min(length, memory.length - paddr);
+	System.arraycopy(memory, paddr, data, offset, amount);
 
 	return amount;
     }
@@ -214,17 +198,55 @@ public class UserProcess {
 				  int length) {
 	Lib.assertTrue(offset >= 0 && length >= 0 && offset+length <= data.length);
 
+	int vPageNumber = Processor.pageFromAddress(vaddr);
+	TranslationEntry pageEntry = pageTable[vPageNumber];
+	if (null == pageEntry) {
+		System.err.println("Attempting to write to an unmapped page");
+		// TODO: signal page fault? bus error?
+		return 0;
+	}
+	if (pageEntry.readOnly) {
+		debug("attempting to write to read-only memory");
+		return 0;
+	}
+
+	int paddr = convertVaddrToPaddr(vaddr);
+	if (-1 == paddr) {
+		return 0;
+	}
+	
 	byte[] memory = Machine.processor().getMemory();
 	
-	// for now, just assume that virtual addresses equal physical addresses
-	if (vaddr < 0 || vaddr >= memory.length)
+	if (paddr < 0 || paddr >= memory.length)
 	    return 0;
 
-	int amount = Math.min(length, memory.length-vaddr);
-	System.arraycopy(data, offset, memory, vaddr, amount);
+	int amount = Math.min(length, memory.length-paddr);
+	System.arraycopy(data, offset, memory, paddr, amount);
 
 	return amount;
     }
+
+    private int convertVaddrToPaddr(int vaddr) {
+		int vPageNumber = Processor.pageFromAddress(vaddr);
+		int pageAddress = Processor.offsetFromAddress(vaddr);
+		TranslationEntry translationEntry = pageTable[vPageNumber];
+		if (null == translationEntry) {
+			// TODO: bus error? page fault?
+			System.err.println("Unmapped page table entry for VPN "+vPageNumber);
+			return -1;
+		}
+		// TODO: validity check?
+		int pPageNumber = translationEntry.ppn;
+		
+		
+		if (pageAddress < 0 || pageAddress >= Processor.pageSize) {
+			debug("bogus pageAddress: "+pageAddress);
+		    return -1;
+		}
+
+		int result = Processor.makeAddress(pPageNumber, pageAddress);
+		return result;
+	}
 
     /**
      * Load the executable with the specified name into this process, and
@@ -281,6 +303,8 @@ public class UserProcess {
 	}
 
 	// program counter initially points at the program entry point
+	// N.B. this does not need to be translated in the Kernel because
+	// the Processor uses our pageTable to translate the address
 	initialPC = coff.getEntryPoint();	
 
 	// next comes the stack; stack pointer initially points to top of it
@@ -289,6 +313,12 @@ public class UserProcess {
 
 	// and finally reserve 1 page for arguments
 	numPages++;
+
+	try {
+		allocPageTable();
+	} catch (IllegalArgumentException iae) {
+		return false;
+	}
 
 	if (!loadSections())
 	    return false;
@@ -329,43 +359,33 @@ public class UserProcess {
      * @return	<tt>true</tt> if the sections were successfully loaded.
      */
     protected boolean loadSections() {
-//	if (numPages > Machine.processor().getNumPhysPages()) {
-//	    coff.close();
-//	    debug( "\tinsufficient physical memory");
-//	    return false;
-//	}
-    List<Integer> allocatedPages = UserKernel.getFreePages(numPages);
-    if (allocatedPages == null){
-    	coff.close();
-    	debug("\tinsufficient physical memory");
-    	return false;
-    }
-    
+	if (numPages > Machine.processor().getNumPhysPages()) {
+	    coff.close();
+	    debug( "\tinsufficient physical memory");
+	    return false;
+	}
+	
 	// load sections
-    int startOfStack = 0;
-    boolean valid = true;
-    boolean used = false;
-    boolean dirty = false;
 	for (int s=0; s<coff.getNumSections(); s++) {
 	    CoffSection section = coff.getSection(s);
-	    boolean readOnly = section.isReadOnly();
+	    
 	    debug( "\tinitializing " + section.getName()
 		      + " section (" + section.getLength() + " pages)");
+
 	    for (int i=0; i<section.getLength(); i++) {
-	    	int vpn = section.getFirstVPN()+i;
-		    int ppn = allocatedPages.get(i);
-			pageTable[vpn] = new TranslationEntry(vpn, ppn, valid, readOnly, used, dirty);
-			section.loadPage(i, ppn);
-			startOfStack++;
+		int vpn = section.getFirstVPN()+i;
+		boolean readOnly = section.isReadOnly();
+		TranslationEntry translationEntry = pageTable[vpn];
+		if (null == translationEntry) {
+			// TODO: bus error? page fault?
+			System.err.println("Unmapped VPN "+vpn);
+			return false;
+		}
+		debug("page[vpn("+vpn+")ppn("+translationEntry.ppn+")].readOnly? "+readOnly);
+		translationEntry.readOnly = readOnly;
+		section.loadPage(i, translationEntry.ppn);
 	    }
-	    
 	}
-	boolean readOnly = true;
-	for (int i = startOfStack; i < numPages; i++ ){
-		pageTable[i] = new TranslationEntry(i, allocatedPages.get(i), valid, readOnly, used, dirty);
-   }
-	
-	
 	
 	return true;
     }
@@ -374,31 +394,32 @@ public class UserProcess {
      * Release any resources allocated by <tt>loadSections()</tt>.
      */
     protected void unloadSections() {
-        int startOfStack = 0;
-	    List<Integer> toBeFreed = new ArrayList<Integer>();
-        for (int s=0; s<coff.getNumSections(); s++) {
-    	    CoffSection section = coff.getSection(s);
-    	    for (int i=0; i<section.getLength(); i++) {
-    	    	int vpn = section.getFirstVPN()+i;
-    			toBeFreed.add(pageTable[vpn].ppn);
-                pageTable[vpn].readOnly = false;
-                pageTable[vpn].valid = false;
-                pageTable[vpn].dirty = false;
-                pageTable[vpn].used  = false;
-                startOfStack++;
-    	    }
-    	    
+    	for (TranslationEntry page : pageTable) {
+    		((UserKernel)Kernel.kernel).free(page.ppn);
     	}
-    	for (int i = startOfStack; i < numPages; i++ ){
-   			toBeFreed.add(pageTable[i].ppn);
-            pageTable[i].readOnly = false;
-            pageTable[i].valid = false;
-            pageTable[i].dirty = false;
-            pageTable[i].used  = false;
-    	}
-    	UserKernel.releasePages(toBeFreed);
-    	  	
-      }    
+    }    
+
+	private void allocPageTable() {
+		pageTable = new TranslationEntry[numPages];
+		int[] freePages = ((UserKernel)Kernel.kernel).malloc(numPages);
+		if (null == freePages) {
+			throw new IllegalArgumentException(
+					"Unable to malloc "+numPages+" pages");
+		}
+		for (int i=0; i<pageTable.length; i++)
+		{
+			int vpn = i;
+			int ppn = freePages[i];
+			boolean valid = true;
+			boolean readOnly = false;
+			boolean used = false;
+			boolean dirty = false;
+		    TranslationEntry table = new TranslationEntry(vpn, ppn, valid, readOnly, used, dirty);
+		    pageTable[i] = table;
+		    debug("pageTable ppn("+table.ppn+") => vpn("+table.vpn+")");
+		}
+	}
+
 
     /**
      * Initialize the processor's registers in preparation for running the
@@ -427,6 +448,7 @@ public class UserProcess {
      * Handle the halt() system call. 
      */
     private int handleHalt() {
+    	debug("handleHalt()");
     	if (pid == 0){
     		Machine.halt();
 	
@@ -478,6 +500,7 @@ public class UserProcess {
      * @return	the value to be returned to the user.
      */
     public int handleSyscall(int syscall, int a0, int a1, int a2, int a3) {
+    	debug("handleSyscall("+a0+","+a1+","+a2+","+a3+")");
 	switch (syscall) {
 	case syscallHalt:
 	    return handleHalt();
@@ -508,6 +531,7 @@ public class UserProcess {
     }
 
     private int handleUnlink(int a0) {
+    	debug("handleUnlink("+a0+")");
     	int returnStatus;
     	try {
     		String filename = readVirtualMemoryString(a0, MAX_STRING_LENGTH);
@@ -527,6 +551,7 @@ public class UserProcess {
 	}
 
 	private int handleClose(int a0) {
+		debug("handleClose("+a0+")");
 		int status = 0;
 		try
 		{
@@ -561,8 +586,8 @@ public class UserProcess {
 			return -1;
 		}
 		byte[] data = new byte[a2];
-		int strLength = readVirtualMemory(a1, data);
-		if (strLength < 0) {
+		int bytesRead = readVirtualMemory(a1, data);
+		if (bytesRead <= 0) {
 			return -1;
 		}
 		debugHex("write-data", data);
@@ -575,7 +600,11 @@ public class UserProcess {
 			// TODO: perror()?
 			return -1;
 		}
-		return outputFile.write(data, 0, data.length);
+		int result = outputFile.write(data, 0, data.length);
+		if (data.length != result) {
+			debug("bogus write; "+result+" <> "+data.length);
+		} 
+		return result;
  	}
  
 	/**
@@ -602,10 +631,10 @@ public class UserProcess {
 			return -1;
 		}
 		int bytesRead = inputFile.read(data, 0, data.length);
-		// TODO: do we care about zero reads?
-		if (-1 == bytesRead) {
+		if (0 >= bytesRead) {
 			return -1;
 		}
+		debugHex("read-data", data);
 		return writeVirtualMemory(a1, data, 0, bytesRead);
  	}
 
@@ -617,7 +646,6 @@ public class UserProcess {
 			if (numOpenFiles < maxNumFiles)
 			{
 				String filename = readVirtualMemoryString(a0, MAX_STRING_LENGTH);
-				// debug("filename:"+filename); // verified file is created
 				FileSystem fs = Machine.stubFileSystem();
 				boolean createOnOpen = false;
 				OpenFile file = fs.open(filename, createOnOpen);
@@ -645,6 +673,7 @@ public class UserProcess {
 	}
 
 	private int handleCreate(int a0) {
+		debug("handleCreate("+a0+")");
 		int fd = 2;
 		try
 		{
@@ -697,6 +726,7 @@ public class UserProcess {
 	 * process of the current process, returns -1.
 	 */
 	private int handleJoin(int a0, int a1) {
+    	debug("handleJoin("+a0+","+a1+")");
 		instanceMutex.acquire();
 		int index = -1;
 		for (int i= 0; i < children.size() ;i++){
@@ -791,6 +821,7 @@ public class UserProcess {
 		boolean executed = child.execute(fileName, arguments);
 		child.parentProcess = this;
 		children.add(child);
+		debug("exec.child.pid="+child.pid);
 		return (executed)? child.pid : error;
 	}
 	
@@ -806,8 +837,14 @@ public class UserProcess {
 	 * exit() never returns.
 	 */
 	private void handleExit(int a0) {
-		for (int i = 0; i < maxNumFiles; i++){
-			handleClose(i);
+		debug("handleExit("+a0+")");
+		for (int i = 0; i < maxNumFiles; i++) {
+			if (null == fileDescriptors[i]) {
+				continue;
+			}
+			if (0 > handleClose(i)) {
+				System.err.println("Unable to close fd "+i);
+			}
 		}
 		Lib.assertTrue(numOpenFiles == 0, "Something's awry with the files");
 		
@@ -845,6 +882,7 @@ public class UserProcess {
      * @param	cause	the user exception that occurred.
      */
     public void handleException(int cause) {
+		debug("handleException("+Processor.exceptionNames[cause]+")");
 	Processor processor = Machine.processor();
 
 	switch (cause) {
@@ -859,8 +897,11 @@ public class UserProcess {
 				       );
 	    processor.writeRegister(Processor.regV0, result);
 	    processor.advancePC();
-	    break;				       
-				       
+	    break;
+	case Processor.exceptionPageFault:
+		debug("PageFault on address "+processor.readRegister(Processor.regBadVAddr));
+		handleExit(-1);
+		break;
 	default:
 	    debug("Unexpected exception: " + Processor.exceptionNames[cause]);
 	    handleExit(-1);
@@ -959,10 +1000,18 @@ public class UserProcess {
     	Lib.debug(dbgProcess, "UserProcess("+pid+"):"+msg);
     }
     
+    @Override
+    public String toString() {
+    	return "UserProcess[pid="+pid+"]";
+    }
+    
     /** The program being run by this process. */
     protected Coff coff;
 
-    /** This process's page table. */
+    /**
+     * This process's page table.
+     * The array index is the virtual page number for this process.
+     */
     protected TranslationEntry[] pageTable;
     /** The number of contiguous pages occupied by the program. */
     protected int numPages;
