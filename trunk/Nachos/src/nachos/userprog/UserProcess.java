@@ -40,6 +40,9 @@ public class UserProcess {
 	pageTable = new TranslationEntry[numPhysPages];
 	fileDescriptors = new OpenFile[maxNumFiles];
 	filePositions = new int[maxNumFiles];
+	
+	// Lib.enableDebugFlags("a");  // enabling debug
+		
 	// set our current file position to "not open"
 	for (int i = 0; i < maxNumFiles; i++) {
 		filePositions[i] = -1;
@@ -554,7 +557,7 @@ public class UserProcess {
 	 */
  	private int handleWrite(int a0, int a1, int a2) {
 		debug("handleWrite("+a0+","+a1+","+a2+")");
-		if (!rangeCheckMemoryAccess(a2)) {
+		if (!rangeCheckMemoryAccess(a1)) {
 			return -1;
 		}
 		byte[] data = new byte[a2];
@@ -587,7 +590,7 @@ public class UserProcess {
 	 */
  	private int handleRead(int a0, int a1, int a2) {
 		debug("handleRead("+a0+","+a1+","+a2+")");
-		if (!rangeCheckMemoryAccess(a2)) {
+		if (!rangeCheckMemoryAccess(a1)) {
 			return -1;
 		}
 		byte[] data = new byte[a2];
@@ -614,6 +617,7 @@ public class UserProcess {
 			if (numOpenFiles < maxNumFiles)
 			{
 				String filename = readVirtualMemoryString(a0, MAX_STRING_LENGTH);
+				// debug("filename:"+filename); // verified file is created
 				FileSystem fs = Machine.stubFileSystem();
 				boolean createOnOpen = false;
 				OpenFile file = fs.open(filename, createOnOpen);
