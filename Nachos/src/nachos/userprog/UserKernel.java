@@ -53,6 +53,29 @@ public class UserKernel extends ThreadedKernel {
 	while (c != 'q');
 
 	System.out.println("");
+	// Testing handleRead() & handleWrite()
+	// 
+	UserProcess  myread = UserProcess.newUserProcess();
+	myread.writeVirtualMemory(100, "myfile.txt".getBytes()); //write string to memory (pointer)
+	int fd =  myread.handleSyscall(4, 100, 0, 0, 0);  // create a file
+	myread.writeVirtualMemory(500, "my textdata".getBytes()); // more write string to memory (pointer)
+	int byteWrite = myread.handleSyscall(7, fd, 500, 11, 0); // Writing Data
+	myread.handleSyscall(8, fd, 0, 0, 0); // Close file
+	fd =  myread.handleSyscall(5, 100, 0, 0, 0); //Open, Mem Aloc, not use
+	int byteRead = myread.handleSyscall(6, fd, 200, 20, 0); // Reading
+	String mystr = String.valueOf(byteRead);  // Write to console
+	for (int i=0;i < mystr.length(); i++){    // Write ro console
+		console.writeByte(mystr.charAt(i));
+	}
+	byte[] mybuffer = new byte[byteRead];  // create buffer
+	myread.readVirtualMemory(200, mybuffer); // put file contents in the buffer
+	for (int i=0;i < mybuffer.length; i++){   // Writes the buffer to the console
+		console.writeByte(mybuffer[i]);
+	}
+	myread.handleSyscall(8, fd, 0, 0, 0);  // Close the file
+	console.writeByte('\n');
+	myread.handleSyscall(1, myread.getPid(), 0, 0, 0);  // handleExit();
+	
     }
 
     /**
