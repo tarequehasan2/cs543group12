@@ -172,6 +172,7 @@ public class LotteryScheduler extends Scheduler {
 		    }
 		    thread = (threadState == null) ? null : threadState.thread;
 		    numTicketsHeld = numTicketsHeld - threadState.getEffectiveNumTickets();
+		    nextThreadPosition = -1;
 	    }
 	    if (thread != null && threadState != null)
 	    	Lib.debug(dbgThread, "Next thread is " + thread.getName() + 
