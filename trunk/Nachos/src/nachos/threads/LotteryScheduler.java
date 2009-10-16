@@ -177,10 +177,6 @@ public class LotteryScheduler extends Scheduler {
 	    if (thread != null && threadState != null)
 	    	Lib.debug(dbgThread, "Next thread is " + thread.getName() + 
 	    			" with effective number of tickets " + threadState.getEffectiveNumTickets());
-	    if (queue.size() != 0)
-	    {
-	    	holdLottery();
-	    }
 	    return thread;
 	}
 
@@ -224,7 +220,10 @@ public class LotteryScheduler extends Scheduler {
 	    {
 	    	// generate a random number
 		    Random generator = new Random();
-		    int lottery = generator.nextInt() % numTicketsHeld;
+		    int lottery = Math.abs(generator.nextInt()) % numTicketsHeld;
+	    	Lib.debug(dbgThread, queue.size() + " thread(s) in queue");
+	    	Lib.debug(dbgThread, "Lottery Number is " + lottery + 
+	    			" with total number of tickets " + numTicketsHeld);
 		    int ticketCount = 0;
 		    for (int i = 0; i < queue.size(); i++)
 		    {
