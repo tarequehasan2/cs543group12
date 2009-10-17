@@ -34,6 +34,7 @@ public class PriorityScheduler extends Scheduler {
     public PriorityScheduler() {
     }
     
+    
     /**
      * Allocate a new priority thread queue.
      *
@@ -45,7 +46,7 @@ public class PriorityScheduler extends Scheduler {
     public ThreadQueue newThreadQueue(boolean transferPriority) {
 	return new PriorityQueue(transferPriority);
     }
-
+    
     public int getPriority(KThread thread) {
 	Lib.assertTrue(Machine.interrupt().disabled());
 		       
@@ -270,7 +271,7 @@ public class PriorityScheduler extends Scheduler {
 		
     }
     
-    private static final char dbgThread = 't';
+    protected static final char dbgThread = 't';
 
     
     /**
@@ -463,7 +464,7 @@ public class PriorityScheduler extends Scheduler {
 		donatePriority(waitQueue);
 	}
 
-	private void donatePriority(PriorityQueue waitQueue) {
+	protected void donatePriority(PriorityQueue waitQueue) {
 		donatePriority(waitQueue, new ArrayList<PriorityQueue>());
 	}
 
