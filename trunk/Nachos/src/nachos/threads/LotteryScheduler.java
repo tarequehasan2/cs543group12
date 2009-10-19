@@ -39,7 +39,39 @@ public class LotteryScheduler extends PriorityScheduler {
    /**
     * The maximum priority that a thread can have. Do not change this value.
     */
-   public static final int priorityMaximum = Integer.MAX_VALUE;    
+   public static final int priorityMaximum = Integer.MAX_VALUE;  
+   
+   /**
+    * Tests whether this module is working.
+    */
+  public static void selfTest() {
+	Lib.debug(dbgThread, "Enter LotteryScheduler.selfTest");
+	KThread[] threads = new KThread[20]; 
+	for (int i = 1; i < 11; i++)
+	{
+		threads[i-1] = new KThread(new Runnable() {
+			   public void run() {
+				   int j = 0;
+				   while (j < 20)
+				   {
+					   long currentTime = Machine.timer().getTime();
+					   while (Machine.timer().getTime() < currentTime + 500)
+					   {
+						   KThread.yield();
+					   }
+					   System.out.println(KThread.currentThread().getName() + " loop # " + j);
+					   j++;
+				   }
+				   }
+			   }).setName("Thread #" + i);
+	}
+	for (int i = 0; i < 10; i++)
+	{
+		threads[i].fork();
+		((LotteryScheduler.ThreadState)threads[i].schedulingState).setPriority(50*i);
+	}
+	KThread.yield();
+  }
 
 	
     @Override
