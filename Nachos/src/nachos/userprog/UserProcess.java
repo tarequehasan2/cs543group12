@@ -530,10 +530,18 @@ public class UserProcess {
 	return 0;
     }
 
+    /**
+     * Use the file system to delete the file indicated by 
+     * the file name in <tt>a0</tt>
+     *
+     * @param	a0	the filename of the file to delete
+     * @return	zero if the file was closed and -1 if unable to process the request.
+     */
     private int handleUnlink(int a0) {
     	debug("handleUnlink("+a0+")");
     	int returnStatus;
     	try {
+    		// Get the file name, and call the file system's delete function
     		String filename = readVirtualMemoryString(a0, MAX_STRING_LENGTH);
     		FileSystem fs = Machine.stubFileSystem();
     		boolean status = fs.remove(filename);
@@ -550,11 +558,20 @@ public class UserProcess {
     	return returnStatus;
 	}
 
+    /**
+     * Close the file object for the file descriptor in <tt>a0</tt>.
+     * This will close the file, remove the descriptor, and 
+     * decrement the number of open files.
+     *
+     * @param	a0	the file descriptor of the file to close
+     * @return	zero if the file was closed and -1 if unable to process the request.
+     */
 	private int handleClose(int a0) {
 		debug("handleClose("+a0+")");
 		int status = 0;
 		try
 		{
+			// Check that the file descriptor is valid, then close the file and clean up.
 			if (a0 < maxNumFiles && fileDescriptors[a0] != null)
 			{
 				fileDescriptors[a0].close();
@@ -638,6 +655,14 @@ public class UserProcess {
 		return writeVirtualMemory(a1, data, 0, bytesRead);
  	}
 
+    /**
+     * Use the file system to open the file indicated by 
+     * the file name in <tt>a0</tt>.  Does not create a file
+     * if the given file name does not exist on the file system.
+     *
+     * @param	a0	the filename of the file to open.
+     * @return	zero if the file was opened and -1 if unable to process the request.
+     */
 	private int handleOpen(int a0) {
 		debug("handleOpen("+a0+")");
 		int fd = 2;
@@ -645,6 +670,7 @@ public class UserProcess {
 		{
 			if (numOpenFiles < maxNumFiles)
 			{
+				// Get the file name, open the file, then store the descriptor
 				String filename = readVirtualMemoryString(a0, MAX_STRING_LENGTH);
 				FileSystem fs = Machine.stubFileSystem();
 				boolean createOnOpen = false;
@@ -672,6 +698,14 @@ public class UserProcess {
 		return fd;
 	}
 
+    /**
+     * Use the file system to create the file indicated by 
+     * the file name in <tt>a0</tt>.  If the file exists, 
+     * it is opened.
+     *
+     * @param	a0	the filename of the file to create.
+     * @return	zero if the file was created/opened and -1 if unable to process the request.
+     */
 	private int handleCreate(int a0) {
 		debug("handleCreate("+a0+")");
 		int fd = 2;
@@ -679,6 +713,7 @@ public class UserProcess {
 		{
 			if (numOpenFiles < maxNumFiles)
 			{
+				// Get the file name, create the file, then store the descriptor
 				String filename = readVirtualMemoryString(a0, MAX_STRING_LENGTH);
 				if (null == filename || 0 == filename.length()) {
 					return -1;
