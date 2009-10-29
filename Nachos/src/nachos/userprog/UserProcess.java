@@ -118,8 +118,9 @@ public class UserProcess {
 	int bytesRead = readVirtualMemory(vaddr, bytes);
 
 	for (int length=0; length<bytesRead; length++) {
-	    if (bytes[length] == 0)
-		return new String(bytes, 0, length);
+	    if (bytes[length] == 0) {
+		    return new String(bytes, 0, length);
+        }
 	}
 
 	return null;
@@ -201,7 +202,7 @@ public class UserProcess {
 	int vPageNumber = Processor.pageFromAddress(vaddr);
 	TranslationEntry pageEntry = pageTable[vPageNumber];
 	if (null == pageEntry) {
-		System.err.println("Attempting to write to an unmapped page");
+		error("Attempting to write to an unmapped page");
 		// TODO: signal page fault? bus error?
 		return 0;
 	}
@@ -226,18 +227,33 @@ public class UserProcess {
 	return amount;
     }
 
+    /**
+     * Translates the provided virtual address into a physical address
+     * <em>for this process</em>. This method handles errors and
+     * will return -1 if unable to fulfill the request.
+     * @param vaddr the complete virtual address
+     * @return the physical address, or -1 if unable to convert the address
+     */
     private int convertVaddrToPaddr(int vaddr) {
 		int vPageNumber = Processor.pageFromAddress(vaddr);
 		int pageAddress = Processor.offsetFromAddress(vaddr);
+        if (null == pageTable) {
+            error("pageTable is not initialized");
+            return -1;
+        }
+        if (vPageNumber >= pageTable.length) {
+            error("Requested a page number ("+vPageNumber
+                    +") outside the page mapping ("+pageTable.length+" total)");
+            return -1;
+        }
 		TranslationEntry translationEntry = pageTable[vPageNumber];
 		if (null == translationEntry) {
 			// TODO: bus error? page fault?
-			System.err.println("Unmapped page table entry for VPN "+vPageNumber);
+			error("Unmapped page table entry for VPN "+vPageNumber);
 			return -1;
 		}
 		// TODO: validity check?
 		int pPageNumber = translationEntry.ppn;
-		
 		
 		if (pageAddress < 0 || pageAddress >= Processor.pageSize) {
 			debug("bogus pageAddress: "+pageAddress);
@@ -272,7 +288,7 @@ public class UserProcess {
 	}
 	catch (EOFException e) {
 	    executable.close();
-	    debug( "\tcoff load failed");
+	    error( "\tcoff load failed");
 	    return false;
 	}
 
@@ -282,7 +298,7 @@ public class UserProcess {
 	    CoffSection section = coff.getSection(s);
 	    if (section.getFirstVPN() != numPages) {
 		coff.close();
-		debug( "\tfragmented executable");
+		error( "\tfragmented executable");
 		return false;
 	    }
 	    numPages += section.getLength();
@@ -298,7 +314,7 @@ public class UserProcess {
 	}
 	if (argsSize > pageSize) {
 	    coff.close();
-	    debug( "\targuments too long");
+	    error( "\targuments too long");
 	    return false;
 	}
 
@@ -361,7 +377,7 @@ public class UserProcess {
     protected boolean loadSections() {
 	if (numPages > Machine.processor().getNumPhysPages()) {
 	    coff.close();
-	    debug( "\tinsufficient physical memory");
+	    error( "\tinsufficient physical memory");
 	    return false;
 	}
 	
@@ -378,7 +394,7 @@ public class UserProcess {
 		TranslationEntry translationEntry = pageTable[vpn];
 		if (null == translationEntry) {
 			// TODO: bus error? page fault?
-			System.err.println("Unmapped VPN "+vpn);
+			error("Unmapped VPN "+vpn);
 			return false;
 		}
 		debug("page[vpn("+vpn+")ppn("+translationEntry.ppn+")].readOnly? "+readOnly);
@@ -524,7 +540,7 @@ public class UserProcess {
 	case syscallUnlink:
     	return handleUnlink(a0);
 	default:
-	    Lib.debug(dbgProcess, "Unknown syscall " + syscall);
+	    debug("Unknown syscall " + syscall);
 	    Lib.assertNotReached("Unknown system call!");
 	}
 	return 0;
@@ -543,6 +559,10 @@ public class UserProcess {
     	try {
     		// Get the file name, and call the file system's delete function
     		String filename = readVirtualMemoryString(a0, MAX_STRING_LENGTH);
+            if (null == filename || 0 == filename.length()) {
+                debug("Attempted to unlink a null or empty filename");
+                return -1;
+            }
     		FileSystem fs = Machine.stubFileSystem();
     		boolean status = fs.remove(filename);
     		if (status){
@@ -842,7 +862,7 @@ public class UserProcess {
 			String argument = null;
 			if (0 != ptrArgv) {
 				argument = readVirtualMemoryString(ptrArgv, MAX_STRING_LENGTH);
-				// is this true?
+				// FIXME: is this true?
 				if (argument == null){
 					return error;
 				}
@@ -878,7 +898,7 @@ public class UserProcess {
 				continue;
 			}
 			if (0 > handleClose(i)) {
-				System.err.println("Unable to close fd "+i);
+				error("Unable to close fd "+i);
 			}
 		}
 		Lib.assertTrue(numOpenFiles == 0, "Something's awry with the files");
@@ -984,7 +1004,7 @@ public class UserProcess {
 
     /**
      * Returns true iff the provided file descriptor index 
-     * is zero to {@link UserProcess.maxNumFiles} (inclusive). N.B. this method
+     * is zero to {@link UserProcess#maxNumFiles} (inclusive). N.B. this method
      * does not guarantee the file descriptor at that index is live (i.e. non-null).
      * For that, {@link #checkForFileDescriptor(int)}.
      * @see #checkForFileDescriptor(int)
@@ -1030,9 +1050,26 @@ public class UserProcess {
     	sb.append("[end]").append(EOL);
     	debug(sb.toString());
     }
-    
+
+    /**
+     * Reports an error message to the operating system console
+     * in the the same manner as {@link #debug(String)}. The message will
+     * be qualified with the current process's <tt>PID</tt>.
+     * @param msg the message to report to the operating system console.
+     */
+    private void error(String msg) {
+        // include our PID to be helpful
+        System.err.println("ERROR:"+toString()+":"+msg);
+    }
+
+    /**
+     * Reports a debug message iff the operating system is running with
+     * our specific debug flag turned on. The message will be qualified
+     * with the current process's <tt>PID</tt>.
+     * @param msg the message to report if running in debug mode.
+     */
     private void debug(String msg) {
-    	Lib.debug(dbgProcess, "UserProcess("+pid+"):"+msg);
+    	Lib.debug(dbgProcess, "DEBUG:"+toString()+":"+msg);
     }
     
     @Override
