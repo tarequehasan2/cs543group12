@@ -19,6 +19,23 @@ We will speak to each of the parts of the project 2 assignment in turn.
 
 === Part 4 ===
 
+The lottery scheduler extends the priority scheduler.  Although, in practice, it uses very little of the functionality
+Priority donation is achieved by calling methods in the superclass, although priority donation is only used in
+pickNextThread() where it would not make sense to use lottery functionality.  By definition of a LotteryScheduler, 
+pickNextThread could choose a different thread each time and thus a different thread from nextThread; so we thought
+that it would be just as useful to use the priority version from the superclass.
+
+With the LotteryScheduler, everything works correctly; however, without having an active controlling thread, there
+is a higher probability that the ready queue will be empty and the machine will halt.  Therefore, it is wise to have 
+a controlling thread join on all forked threads so that there is always a thread in the ready queue.
+
+The selfTest from the Priority Scheduler yielded the same results each time, because there were not enough threads
+to hold a lottery that would differ from run to run.   Self test was reimplemented on the LotteryScheduler with
+many threads having varying priorities; as expected, every run was different because different threads won the lottery
+(not strictly based on priority).
+
+We are unaware of anything that does not work as expected on the lottery scheduler.
+
 
 == COMPILING THE TEST PROGRAMS ==
 
