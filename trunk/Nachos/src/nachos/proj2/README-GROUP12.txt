@@ -13,28 +13,76 @@ We will speak to each of the parts of the project 2 assignment in turn.
 
 === Part 1 ===
 
+In order to bullet-proof the calls, we
+
+The invocation to halt() checks that the current process in the root
+process, and otherwise silently returns with success.
+
+All invocations in the syscall handlers use readVirtualMemory and
+writeVirtualMemory as prescribed.
+
+There was some discussion in BlackBoard about whether the string
+length was inclusive or exclusive of the trailing zero. Our group
+concluded that the objective was to have 256 byte strings, which
+occupy 257 bytes in memory when the terminating character is
+considered.
+
+As prescribed, all syscall handlers return -1 to signal error. They
+will return -1 on procedural errors, also, such as bogus memory
+addresses or an out of bounds file descriptor.
+
+All syscalls required for part 1 were implemented successfully.
+
 === Part 2 ===
+
+We implemented UserKernel.malloc and UserKernel.free using the linked
+list of free pages as recommended by the assignment. The UserKernel
+will allocate pages in the order the linked list returns them, so it
+will initially be contiguous and then more fragmented as the
+UserKernel continues to run.
+
+Since each process maps its virtual pages to physical pages, there
+should be no need for the UserKernel to re-order the page numbers in
+the "free pool". In fact, recent security advances in modern operating
+systems take great steps to randomize allocated addresses to lower the
+attack surface for stack overruns. Consider it a feature, not a bug. :-)
+
+We modified readVirtualMemory and writeVirtualMemory to do virtual to
+physical address translation. A current limitation in our
+readVirtualMemory and writeVirtualMemory is that a read which crosses
+a page boundary is not handled. We did not expect this was necessary
+for our assignment. We know how to do it, and will be glad to
+implement it if necessary for subsequent assignments.
 
 === Part 3 ===
 
 === Part 4 ===
 
-The lottery scheduler extends the priority scheduler.  Although, in practice, it uses very little of the functionality
-Priority donation is achieved by calling methods in the superclass, although priority donation is only used in
-pickNextThread() where it would not make sense to use lottery functionality.  By definition of a LotteryScheduler, 
-pickNextThread could choose a different thread each time and thus a different thread from nextThread; so we thought
-that it would be just as useful to use the priority version from the superclass.
+The lottery scheduler extends the priority scheduler.  Although, in
+practice, it uses very little of the functionality Priority donation
+is achieved by calling methods in the superclass, although priority
+donation is only used in pickNextThread() where it would not make
+sense to use lottery functionality.  By definition of a
+LotteryScheduler, pickNextThread could choose a different thread each
+time and thus a different thread from nextThread; so we thought that
+it would be just as useful to use the priority version from the
+superclass.
 
-With the LotteryScheduler, everything works correctly; however, without having an active controlling thread, there
-is a higher probability that the ready queue will be empty and the machine will halt.  Therefore, it is wise to have 
-a controlling thread join on all forked threads so that there is always a thread in the ready queue.
+With the LotteryScheduler, everything works correctly; however,
+without having an active controlling thread, there is a higher
+probability that the ready queue will be empty and the machine will
+halt.  Therefore, it is wise to have a controlling thread join on all
+forked threads so that there is always a thread in the ready queue.
 
-The selfTest from the Priority Scheduler yielded the same results each time, because there were not enough threads
-to hold a lottery that would differ from run to run.   Self test was reimplemented on the LotteryScheduler with
-many threads having varying priorities; as expected, every run was different because different threads won the lottery
-(not strictly based on priority).
+The selfTest from the Priority Scheduler yielded the same results each
+time, because there were not enough threads to hold a lottery that
+would differ from run to run.  Self test was reimplemented on the
+LotteryScheduler with many threads having varying priorities; as
+expected, every run was different because different threads won the
+lottery (not strictly based on priority).
 
-We are unaware of anything that does not work as expected on the lottery scheduler.
+We are unaware of anything that does not work as expected on the
+lottery scheduler.
 
 
 == COMPILING THE TEST PROGRAMS ==
