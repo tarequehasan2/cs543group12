@@ -206,7 +206,6 @@ public class LotteryScheduler extends PriorityScheduler {
     	 */
 		@Override
 		public void waitForAccess(PriorityQueue waitQueue) {
-			Lib.assertTrue(Machine.interrupt().disabled());
 			super.waitForAccess(waitQueue);
 			calculateTickets(waitQueue);
 		}
