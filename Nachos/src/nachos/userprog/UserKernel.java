@@ -49,7 +49,6 @@ public class UserKernel extends ThreadedKernel {
      * Test the console device.
      */	
     public void selfTest() {
-    	
     }
 
     // disabled because does not work with paged memory
@@ -193,7 +192,7 @@ public class UserKernel extends ThreadedKernel {
     
     /**
      * Deallocates the <b>physical</b> page number provided. 
-     * @param pages the <b>physical</b> page number.
+     * @param page the <b>physical</b> page number.
      */
     void free(int page) {
     	freePagesL.acquire();
@@ -212,7 +211,13 @@ public class UserKernel extends ThreadedKernel {
     
     // don't initialize it statically, 
     // since Lock needs the KThread system to be running
-    private static Lock freePagesL; 
+    /**
+     * Guards {@link #freePages} against multiple access.
+     */
+    private static Lock freePagesL;
+    /**
+     * Contains a list of the page number which is known to be free.
+     */
     private static LinkedList<Integer> freePages
     	= new LinkedList<Integer>();
 }
