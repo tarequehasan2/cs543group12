@@ -3,9 +3,31 @@ for project 2 by Group 12.
 
 It is organized into the following sections:
 
+ * COMPILATION WARNING
  * APPROACH
  * COMPILING THE TEST PROGRAMS 
  * RUNNING THE TEST PROGRAMS
+
+
+== COMPILATION WARNING ==
+
+It is our experience that compiling on Tux using the provided Makefile is insufficient. This is because on Tux, they use the Eclipse Java Compiler (ejc) which requires more specific arguments than does the Javac which ships with Java6.
+
+There are two approaches to circumvent this problem.
+
+One can ensure that the Sun Java Development Kit appears first in the
+$PATH, like so:
+
+sh$ PATH=/usr/lib/jvm/java-6-sun/bin:$PATH
+sh$ make
+
+Or modify the top-level Makefile to pass additional arguments to
+javac, so that it understands the source code version. An example
+javac command-line would include:
+
+javac -source 1.6 -target 1.6
+
+and will be considerably less verbose if one also includes "-nowarn".
 
 == APPROACH ==
 
@@ -13,7 +35,11 @@ We will speak to each of the parts of the project 2 assignment in turn.
 
 === Part 1 ===
 
-In order to bullet-proof the calls, we
+In order to bullet-proof the calls, we took precautions when
+dereferencing memory addresses, file descriptors, page tables and the
+like. We also took reasonable steps in the operating system
+implementation code, also, such as checking the array lengths we use
+and ensuring our own state was valid.
 
 The invocation to halt() checks that the current process in the root
 process, and otherwise silently returns with success.
@@ -55,6 +81,8 @@ for our assignment. We know how to do it, and will be glad to
 implement it if necessary for subsequent assignments.
 
 === Part 3 ===
+
+
 
 === Part 4 ===
 
@@ -135,12 +163,30 @@ the project, how to run them and what they are expected to prove (or
 disprove).
 
 * 50files.coff:
+  shows that we can open, close and unlink 50 files
 * bigmem.coff:
+  shows that the kernel will not load an executable 
+  which does not fit in memory
 * longFile.coff:
+  shows that we successfully check the string length for calls to creat.
 * LotsOfFiles.coff:
+  shows that we are able to open, close and unlink a large number of files
 * rmhi.coff:
+  was an early test showing that we can unlink a file named "hi.txt"
 * runnit.coff:
+  shows that fork and join work correctly
+  also shows that one can call join with various invalid arguments 
+  and the correct error codes are returned
+
+  Be aware that the SyncConsole is character buffered, not line
+  buffered like wih Unix. This means that the output from echo.coff
+  (the child process) is interleaved with the output from runnit.coff
+  (the parent). It looks like garbage, but it's just interleaving. All
+  characters are accounted for.
+
 * sayhi.coff:
+  was an early test showing that we can creat a file named "hi.txt",
+  write characters to it and then read them back successfully
 
 Due to a limitation with the way Nachos parses command-line arguments,
 if one wishes to use the provided COFF programs (e.g. cat.coff,
