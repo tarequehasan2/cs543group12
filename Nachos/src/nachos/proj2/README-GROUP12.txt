@@ -82,7 +82,10 @@ implement it if necessary for subsequent assignments.
 
 === Part 3 ===
 
-
+We implemented this part successfully, as some of the example programs
+show below. The larger test for this section, however, is the use of
+sh.coff because it allows one to fork and join processes, and will
+output their return code.
 
 === Part 4 ===
 
