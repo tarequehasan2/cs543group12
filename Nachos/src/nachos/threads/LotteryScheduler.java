@@ -73,7 +73,9 @@ public class LotteryScheduler extends PriorityScheduler {
 	KThread.yield();
   }
 
-	
+	/**
+	 *  gets a new LotterySthreadState class
+	 */
     @Override
 	protected ThreadState getThreadState(KThread thread) {
         if (thread.schedulingState == null)
@@ -83,6 +85,10 @@ public class LotteryScheduler extends PriorityScheduler {
             
 	}
 
+    /**
+     * Uses the superclass to decrease priority and, if successful, reduces the number of tickets
+     * assigned to the current thread.   The donated tickets will then be recalculated.
+     */
 	@Override
 	public boolean decreasePriority() {
 		boolean intStatus = Machine.interrupt().disable();
@@ -102,7 +108,11 @@ public class LotteryScheduler extends PriorityScheduler {
 		Machine.interrupt().restore(intStatus);
 		return true;
 	}
-
+	
+	/**
+     * Uses the superclass to increase priority and, if successful, reduces the number of tickets
+     * assigned to the current thread.   The donated tickets will then be recalculated.
+     */
 	@Override
 	public boolean increasePriority() {
 		boolean intStatus = Machine.interrupt().disable();
@@ -124,10 +134,15 @@ public class LotteryScheduler extends PriorityScheduler {
 		
 	}
 
+	/**
+     * Uses the superclass to set the priority, then sets the number of tickets assigned to the current
+     *  thread equal to that priority.   The donated tickets will then be recalculated.
+     */
 	@Override
 	public void setPriority(KThread thread, int priority) {
 		super.setPriority(thread, priority);
-		
+
+    	boolean intStatus = Machine.interrupt().disable(); 
 		//Super already handled assertions
 		((LotteryThreadState)thread.schedulingState).numberOfTickets=priority;
 		if (((LotteryThreadState)thread.schedulingState).waitingInQueue != null){
@@ -135,12 +150,19 @@ public class LotteryScheduler extends PriorityScheduler {
 				((LotteryThreadState)thread.schedulingState).waitingInQueue
 				);
 		}
-		
+		Machine.interrupt().restore(intStatus);
 	}
 
+	/**
+	 * Same as <code>setPriority(KThread, int)</code>, except that <code>KThread.currentThread()</code>
+	 *  is the default. 
+	 */
 	@Override
 	public void setPriority(int priority) {
+
+    	boolean intStatus = Machine.interrupt().disable(); 
 		setPriority(KThread.currentThread(), priority);
+		Machine.interrupt().restore(intStatus);
 	}
 
 	/**
@@ -161,15 +183,31 @@ public class LotteryScheduler extends PriorityScheduler {
 	     return  new LotteryQueue(transferPriority);
     }
     
+    /**
+     *Extended the threadstate in order to store the number of tickets, donated tickets
+     *and impement a new method of calculating donation, since it is inherently different
+     *than the PriorityScheduler 
+     */
     protected class LotteryThreadState extends ThreadState {
 
- 		public void setPriority(int priority) {
+    	/**
+    	 * Calls the superclass to set the priority and sets the number of tickets equal to the priority
+    	 * @see nachos.threads.PriorityScheduler.ThreadState#setPriority(int)
+    	 */
+    	@Override
+    	public void setPriority(int priority) {
+ 			Lib.assertTrue(Machine.interrupt().disabled());
  			this.numberOfTickets = priority;
 			super.setPriority(priority);
 		}
  		
+    	/**
+    	 * Calls waitforAccess in the superclass and recalculates the ticket donation
+    	 * @see nachos.threads.PriorityScheduler.ThreadState#waitForAccess(nachos.threads.PriorityScheduler.PriorityQueue)
+    	 */
 		@Override
 		public void waitForAccess(PriorityQueue waitQueue) {
+			Lib.assertTrue(Machine.interrupt().disabled());
 			super.waitForAccess(waitQueue);
 			calculateTickets(waitQueue);
 		}
@@ -182,11 +220,20 @@ public class LotteryScheduler extends PriorityScheduler {
 			this.numberOfTickets=priorityDefault;
 		}
 		
-		
+		/**
+		 * The first method called in calculate tickets, will add all of the tickets in the queue to 
+		 * the current lockolder of the waitQueue.   If the lockHolder is waiting in a queue, the tickets
+		 * will be recalculated there as well.
+		 * 
+		 * @param waitQueue
+		 */
 		public void calculateTickets(PriorityQueue waitQueue) {
 			calculateTickets(waitQueue, new ArrayList<PriorityQueue>());
 		}
 		
+		//helper method that continues iterating through queues until a lockholder is not waiting in 
+		//a queue or a quue has already been calculated.  donates the number of tickets of all waiters
+		// to the lockholder.
 		private void calculateTickets(PriorityQueue waitQueue,
 				List<PriorityQueue> visitedQueues) {
 			if (waitQueue.lockHolder == null || visitedQueues.contains(waitQueue))
@@ -210,10 +257,12 @@ public class LotteryScheduler extends PriorityScheduler {
 			 
 			
 		}
+		
+		// gets the total number of tickets in a given queue.
 		private int getNumTicketsInThisQueue(PriorityQueue waitQueue) {
 			int runningTotal = this.numberOfTickets;
 			for (ThreadState threadState : waitQueue.queue){
-				runningTotal += ((LotteryThreadState)threadState).numberOfTickets;
+				runningTotal += ((LotteryThreadState)threadState).numberOfTickets + ((LotteryThreadState)threadState).donatedTickets;
 			}
 			return runningTotal;
 
@@ -222,23 +271,34 @@ public class LotteryScheduler extends PriorityScheduler {
     	
     }
     
+    /**
+     * Extended the Priority queue to reimplement nextThread.  This is where the lottery actually happens.
+     */
     protected class LotteryQueue extends PriorityQueue{
+    	/**
+    	 * Picks a next thread via a lottery.   If the total tickes in the queue == 0, then the lottery is not held.
+    	 * Otherwise, the lottery is held by calculating the donated tickets and the actual tickets in the
+    	 * queue.  It uses the psuedorandom generator to generate a random number mod the total tickets in the queue.
+    	 * This provides a ticket threshold.   We iterate through the queue, counting the tickets until we reach
+    	 * the threshold.  The winning thread is the one whose ticket count exceeds the number of the lottery.
+    	 * 
+    	 * It is removed from the queue and becomes the new lockholder.  Donations are removed and the tickets are
+    	 * recalculated.
+    	 * 
+    	 * @see nachos.threads.PriorityScheduler.PriorityQueue#nextThread()
+    	 */
 		@Override
 		public KThread nextThread() {
 			if (queue.size() == 0)
 				return null;
-			//if (!transferPriority){
-			//	return super.nextThread();
-		//	}
 		    Lib.assertTrue(Machine.interrupt().disabled());
-		    // assuming that we have everything in order, we should be able to poll the queue.
 		    int totalTickets = 0;
 		    if (lockHolder!=null){
 		     totalTickets=((LotteryThreadState)lockHolder).donatedTickets + ((LotteryThreadState)lockHolder).numberOfTickets;
 		    }else{
 		    	for (ThreadState currentThreadState : queue){
 			    	Lib.assertTrue(currentThreadState instanceof LotteryThreadState);
-			    	totalTickets += ((LotteryThreadState)currentThreadState).numberOfTickets;
+			    	totalTickets += ((LotteryThreadState)currentThreadState).numberOfTickets +((LotteryThreadState)currentThreadState).donatedTickets;
 		    	}
 		    }
 		    Random generator = new Random();
@@ -250,7 +310,7 @@ public class LotteryScheduler extends PriorityScheduler {
 		    ThreadState threadState = null;
 		    for (ThreadState currentThreadState : queue){
 		    	Lib.assertTrue(currentThreadState instanceof LotteryThreadState);
-		    	ticketCount += ((LotteryThreadState)currentThreadState).numberOfTickets;
+		    	ticketCount += ((LotteryThreadState)currentThreadState).numberOfTickets + ((LotteryThreadState)currentThreadState).donatedTickets;
 		    	if (ticketCount >= lottery){
 		    		threadState = currentThreadState;
 		    		queue.remove(threadState);
@@ -278,6 +338,10 @@ public class LotteryScheduler extends PriorityScheduler {
 		    return thread;
 		}
 
+		/**
+		 * Decided that since this is a lottery, pickNextThread isn't much use, so it returns what would be retuned
+		 * in the priority scheme.   Do not depend on this to tell you what will be returned by nextThread().
+		 */
 		@Override
 		protected ThreadState pickNextThread() {
 			// TODO Is there a valid pickNextThread for the lottery?   It certainly wouldn't return the same 
