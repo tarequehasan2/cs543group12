@@ -196,7 +196,6 @@ public class LotteryScheduler extends PriorityScheduler {
     	 */
     	@Override
     	public void setPriority(int priority) {
- 			Lib.assertTrue(Machine.interrupt().disabled());
  			this.numberOfTickets = priority;
 			super.setPriority(priority);
 		}
