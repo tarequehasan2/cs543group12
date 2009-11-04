@@ -41,6 +41,8 @@ public class VMKernel extends UserKernel {
      * Terminate this kernel. Never returns.
      */
     public void terminate() {
+    // jjt
+    fileSystem.remove(VMProcess.Swap_File_Name);
 	super.terminate();
     }
 
