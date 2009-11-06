@@ -95,7 +95,7 @@ public class SwapFile {
 	
 	public static void free(int pid){
 		lock.acquire();
-		Set<Integer> position = positionByPid[pid];
+		Set<Integer> positions = positionByPid.get(pid);
     	for (Integer page : positions) {
     		//TODO: actual cleanup
     	}
