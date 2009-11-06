@@ -97,8 +97,15 @@ public class SwapFile {
 		lock.acquire();
 		Set<Integer> positions = positionByPid.get(pid);
     	for (Integer page : positions) {
-    		//TODO: actual cleanup
-    	}
+    		pages.set(page, PageStatus.UNUSED);
+    	} 
+		Set<MemoryKey> keys = position.keySet();
+		for (MemoryKey key : keys){
+			if (key.getPid() == pid){
+				position.remove(key);
+			}
+		}
+    	positionByPid.remove(pid);
 		lock.release();
 	}
 

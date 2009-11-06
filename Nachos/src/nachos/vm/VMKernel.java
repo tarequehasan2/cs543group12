@@ -49,12 +49,10 @@ public class VMKernel extends UserKernel {
      */
     public void free(int pid)
     {
-    	ipt.free(pid);
-    	swap.free(pid);
+    	InvertedPageTable.free(pid);
+    	SwapFile.free(pid);
     }
     
-    private InvertedPageTable ipt = new InvertedPageTable();
-    private SwapFile swap = new SwapFile();
 
     // dummy variables to make javac smarter
     private static VMProcess dummy1 = null;

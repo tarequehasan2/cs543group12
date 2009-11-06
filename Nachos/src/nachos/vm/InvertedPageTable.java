@@ -2,6 +2,7 @@ package nachos.vm;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
@@ -96,8 +97,16 @@ public class InvertedPageTable {
 		lock.acquire();
 		Set<Integer> positions = positionByPid.get(pid);
     	for (Integer page : positions) {
-    		//TODO: actual cleanup
-    	}
+    		pages[page] = PageStatus.UNUSED;
+    		pageTable[page] = null;
+    	} 
+		Set<MemoryKey> keys = position.keySet();
+		for (MemoryKey key : keys){
+			if (key.getPid() == pid){
+				position.remove(key);
+			}
+		}
+    	positionByPid.remove(pid);
 		lock.release();
 	}
 
