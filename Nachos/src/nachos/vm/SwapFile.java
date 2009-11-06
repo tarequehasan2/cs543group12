@@ -1,9 +1,11 @@
 package nachos.vm;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import nachos.machine.Machine;
 import nachos.machine.OpenFile;
@@ -15,6 +17,8 @@ public class SwapFile {
 	private static final String SWAP_FILE_NAME = ".swap";
 	private static final OpenFile swap;
 	private static final Map<MemoryKey,Integer> position;
+	// In case we need to get all memory addresses by pid - just set, not read yet
+	private static final Map<Integer,Set<Integer>> positionByPid;
 	private static final Lock lock;
 	private static List<PageStatus> pages;
 	private enum PageStatus{
@@ -24,6 +28,7 @@ public class SwapFile {
 	static {
 		swap = Machine.stubFileSystem().open(SWAP_FILE_NAME, true);
 		position = new HashMap<MemoryKey, Integer>();
+		positionByPid = new HashMap<Integer, Set<Integer>>();
 		lock = new Lock();
 		pages = new LinkedList<PageStatus>();
 	}
@@ -43,6 +48,7 @@ public class SwapFile {
         }
         int read = tmpRead;
         position.remove(key);
+        positionByPid.get(key.getPid()).remove(start);
         pages.set(start, PageStatus.UNUSED);
 		lock.release();
 		return read;
@@ -67,7 +73,14 @@ public class SwapFile {
 				return -1;
 			}
 			pages.set(nextPosition, PageStatus.USED);
-			position.put(key, Integer.valueOf(nextPosition));
+			position.put(key, nextPosition);
+			if (positionByPid.containsKey(key.getPid())){
+				positionByPid.get(key.getPid()).add(nextPosition);
+			}else{
+				Set<Integer> set = new HashSet<Integer>();
+				set.add(nextPosition);
+				positionByPid.put(key.getPid(), set);
+			}
 			int result = written;
 		lock.release();	
 		return result;
