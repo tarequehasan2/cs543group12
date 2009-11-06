@@ -96,10 +96,15 @@ public class InvertedPageTable {
 	public static void free(int pid){
 		lock.acquire();
 		Set<Integer> positions = positionByPid.get(pid);
+		if (positions == null){
+			lock.release();
+			return;
+		}
     	for (Integer page : positions) {
     		pages[page] = PageStatus.UNUSED;
     		pageTable[page] = null;
-    	} 
+    	}
+		
 		Set<MemoryKey> keys = position.keySet();
 		for (MemoryKey key : keys){
 			if (key.getPid() == pid){
