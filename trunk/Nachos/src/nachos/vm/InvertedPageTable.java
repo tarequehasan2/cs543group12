@@ -44,6 +44,10 @@ public class InvertedPageTable {
 		return result;
 	}
 	
+	public static boolean write(TranslationEntry translationEntry, MemoryKey key){
+		return write(translationEntry, key.getPid());
+	}
+	
 	public static boolean write(TranslationEntry translationEntry, int pid){
 		lock.acquire();
 			int nextPosition = -1;
@@ -74,7 +78,7 @@ public class InvertedPageTable {
 			pageTable[nextPosition] = translationEntry;
 		lock.release();	
 		return true;
-	}
+	}	
 	
 	public static void remove(MemoryKey key){
 		lock.acquire();
