@@ -61,13 +61,27 @@ public class VMProcess extends UserProcess {
 	Processor processor = Machine.processor();
 
 	switch (cause) {
+	case Processor.exceptionTLBMiss:
+		handleTLBMiss();
+		break;
 	default:
 	    super.handleException(cause);
 	    break;
 	}
     }
 	
-    private static final int pageSize = Processor.pageSize;
+    private void handleTLBMiss() {
+    	System.out.println("Handling TLB Miss");
+    	
+    	// just get out for now -- otherwise you'll expect me to do somehting....
+    	super.handleException(Processor.exceptionTLBMiss);
+    	
+    	
+		// TODO Auto-generated method stub
+		
+	}
+
+	private static final int pageSize = Processor.pageSize;
     private static final char dbgProcess = 'a';
     private static final char dbgVM = 'v';
 }
