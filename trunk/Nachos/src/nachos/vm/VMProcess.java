@@ -46,7 +46,7 @@ public class VMProcess extends UserProcess {
      * Release any resources allocated by <tt>loadSections()</tt>.
      */
     protected void unloadSections() {
-	super.unloadSections();
+    	((VMKernel)Kernel.kernel).free(this.pid);
     }    
 
     /**

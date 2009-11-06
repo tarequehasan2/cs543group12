@@ -91,6 +91,15 @@ public class InvertedPageTable {
 			}
 		lock.release();
 	}
+	
+	public static void free(int pid){
+		lock.acquire();
+		Set<Integer> position = positionByPid[pid];
+    	for (Integer page : positions) {
+    		//TODO: actual cleanup
+    	}
+		lock.release();
+	}
 
 
 }

@@ -43,6 +43,18 @@ public class VMKernel extends UserKernel {
     public void terminate() {
 	super.terminate();
     }
+    
+    /**
+     * Free pages that are owned by the process that is passed in
+     */
+    public void free(int pid)
+    {
+    	ipt.free(pid);
+    	swap.free(pid);
+    }
+    
+    private InvertedPageTable ipt = new InvertedPageTable();
+    private SwapFile swap = new SwapFile();
 
     // dummy variables to make javac smarter
     private static VMProcess dummy1 = null;
