@@ -123,7 +123,7 @@ public final class Lib {
      */
     public static void debug(char flag, String message) {
 	if (test(flag))
-	    System.out.println(message);
+	    System.err.println(message);
     }
 
     /**

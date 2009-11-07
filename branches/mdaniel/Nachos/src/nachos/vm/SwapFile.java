@@ -1,116 +1,156 @@
 package nachos.vm;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
+import nachos.machine.FileSystem;
 import nachos.machine.Machine;
 import nachos.machine.OpenFile;
 import nachos.machine.Processor;
 import nachos.threads.Lock;
 
 public class SwapFile {
-	
 	private static final String SWAP_FILE_NAME = ".swap";
+    /**
+     * Contains the frame size in the swap file. This will always be 
+     * greater than or equal to {@link Processor#pageSize}.
+     */
+    private static final int SWAP_FRAME_SIZE = Processor.pageSize;
+    private static final FileSystem fileSystem;
 	private static final OpenFile swap;
-	private static final Map<MemoryKey,Integer> position;
-	// In case we need to get all memory addresses by pid - just set, not read yet
-	private static final Map<Integer,Set<Integer>> positionByPid;
+    /** Contains the file offset for each page, mapped by per-process vpn. */
+	private static final Map<Integer, Map<Integer, Integer>> positions;
 	private static final Lock lock;
-	private static List<PageStatus> pages;
-	private enum PageStatus{
-		USED,UNUSED;
-	}
-	
+    /** Contains a list of integers which,
+     * when multiplied by {@link Processor#pageSize},
+     * will yield the available offsets in the pagefile.
+     */
+	private static final LinkedList<Integer> freePages;
+
 	static {
-		swap = Machine.stubFileSystem().open(SWAP_FILE_NAME, true);
-		position = new HashMap<MemoryKey, Integer>();
-		positionByPid = new HashMap<Integer, Set<Integer>>();
+        fileSystem = Machine.stubFileSystem();
+        swap = fileSystem.open(SWAP_FILE_NAME, true);
+		positions = new HashMap<Integer, Map<Integer, Integer>>();
 		lock = new Lock();
-		pages = new LinkedList<PageStatus>();
+		freePages = new LinkedList<Integer>();
 	}
-	
-	public static int read(MemoryKey key, int ppn){
+
+	public boolean contains(int pid, int ppn) {
+        return positions.containsKey(pid) &&
+                positions.get(pid).containsKey(ppn);
+    }
+
+    /**
+     * Reads the specified physical frame
+     * (used by the specified process) back into main memory.
+     * @param pid the process for whom we are swapping the frame.
+     * @param ppn the physical frame to roll-in.
+     * @return true if ok, false otherwise.
+     */
+	public static boolean rollIn(int pid, int ppn) {
 		lock.acquire();
-		int tmpRead = 0;
-        Integer start = position.get(key);
-        if(start != null){
-        	// jnz - was going to retun a byte array, but decided to read directly in to physical memory.  
-        	//  'cuz its easier.   Is that too dangerous?
-        	tmpRead = swap.read(start * Processor.pageSize, Machine.processor().getMemory(), ppn * Processor.pageSize, Processor.pageSize);
-        	if(tmpRead != Processor.pageSize){
-        		lock.release();
-        		return -1;
-        	}
+
+        Map<Integer, Integer> pageMap = positions.get(pid);
+        if (null == pageMap) {
+            error("Unable to find persisted page "+ppn+" for pid "+pid);
+            lock.release();
+            return false;
         }
-        int read = tmpRead;
-        position.remove(key);
-        positionByPid.get(key.getPid()).remove(start);
-        pages.set(start, PageStatus.UNUSED);
+        final int slotNumber = pageMap.get(ppn);
+        final int pos = slotNumber * SWAP_FRAME_SIZE;
+        final byte[] memory = Machine.processor().getMemory();
+        final int memoryOffset = ppn * SWAP_FRAME_SIZE;
+        /// WARNING: if you encoded metadata, ensure you bump the pos
+        /// before calling this or you'll smash your metadata in the swap
+        final int bytesRead =
+                swap.read(pos, memory, memoryOffset, SWAP_FRAME_SIZE);
+        if (bytesRead != SWAP_FRAME_SIZE) {
+            error("Incorrect read size; expected "
+                    +SWAP_FRAME_SIZE+" but wrote "+bytesRead);
+            lock.release();
+            return false;
+        }
+
+        // now free up that slot for someone else, since the process shouldn't
+        // be asking for the same frame twice
+        freePages.add(slotNumber);
+
 		lock.release();
-		return read;
+		return true;
 	}
-	
-	public static int write(MemoryKey key, int ppn){
+
+    /**
+     * Writes the specified in-memory physical frame
+     * (used by the specified process) to persistent storage.
+     * @param pid the process for whom we are swapping the frame.
+     * @param ppn the physical frame to roll-out.
+     * @return true if ok, false otherwise.
+     */
+	public static boolean rollOut(int pid, int ppn) {
 		lock.acquire();
-			int nextPosition = -1;
-			for (int i=0; i<pages.size(); i++){
-				if (pages.get(i).equals(PageStatus.UNUSED)){
-					nextPosition = i;
-					break;
-				}
-			}
-			if (nextPosition == -1){
-				nextPosition = pages.size();
-				pages.add(PageStatus.UNUSED);
-			}
-			int written = swap.write(nextPosition * Processor.pageSize, Machine.processor().getMemory(), ppn * Processor.pageSize, Processor.pageSize);
-			if (written != Processor.pageSize){
-				lock.release();
-				return -1;
-			}
-			pages.set(nextPosition, PageStatus.USED);
-			position.put(key, nextPosition);
-			if (positionByPid.containsKey(key.getPid())){
-				positionByPid.get(key.getPid()).add(nextPosition);
-			}else{
-				Set<Integer> set = new HashSet<Integer>();
-				set.add(nextPosition);
-				positionByPid.put(key.getPid(), set);
-			}
-			int result = written;
-		lock.release();	
-		return result;
+        if (freePages.isEmpty()) {
+            // it's like printing money, eh?
+            int inUse = swap.length() / SWAP_FRAME_SIZE;
+            freePages.add(inUse + 1);
+        }
+        int nextPosition = freePages.removeFirst();
+        final int pos = nextPosition * SWAP_FRAME_SIZE;
+        final byte[] memory = Machine.processor().getMemory();
+        final int memoryOffset = ppn * SWAP_FRAME_SIZE;
+        /// WARNING: if you encode metadata, ensure you bump the pos
+        /// before calling this or you'll write metadata into main memory
+        final int written = swap.write(pos, memory, memoryOffset, SWAP_FRAME_SIZE);
+        if (written != SWAP_FRAME_SIZE) {
+            error("Incorrect write size; expected "
+                    +SWAP_FRAME_SIZE+" but wrote "+written);
+		    lock.release();
+			return false;
+		}
+        
+        Map<Integer, Integer> pageMap = positions.get(pid);
+        if (null == pageMap) {
+            pageMap = new HashMap<Integer, Integer>();
+            positions.put(pid, pageMap);
+        }
+        pageMap.put(ppn, nextPosition);
+        
+        lock.release();
+		return true;
 	}
-	
+
+    /**
+     * Closes and deletes the SwapFile.
+     */
 	public static void close(){
 		lock.acquire();
-			swap.close();
-			Machine.stubFileSystem().remove(SWAP_FILE_NAME);
-		lock.release();
+        swap.close();
+        boolean ok = fileSystem.remove(SWAP_FILE_NAME);
+        if (!ok) {
+            error("Unable to remove \"" + SWAP_FILE_NAME + "\"");
+        }
+        lock.release();
 	}
-	
+
+    /**
+     * Frees the pages which were persisted for the process identified
+     * by the given pid.
+     * @param pid the process whose pages should be freed from the swap.
+     */
 	public static void free(int pid){
 		lock.acquire();
-		Set<Integer> positions = positionByPid.get(pid);
-		if (positions == null){
+        final Map<Integer, Integer> pageMap = positions.get(pid);
+        if (null == pageMap || pageMap.isEmpty()){
 			lock.release();
 			return;
 		}
-    	for (Integer page : positions) {
-    		pages.set(page, PageStatus.UNUSED);
-    	} 
-		Set<MemoryKey> keys = position.keySet();
-		for (MemoryKey key : keys){
-			if (key.getPid() == pid){
-				position.remove(key);
-			}
-		}
-    	positionByPid.remove(pid);
+        for (Integer offset : pageMap.values()) {
+            freePages.add(offset);
+        }
 		lock.release();
 	}
 
+    static void error(String msg) {
+        System.err.println("ERROR:SwapFile:"+msg);
+    }
 }

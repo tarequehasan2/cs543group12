@@ -295,7 +295,7 @@ public final class Processor {
     private int translate(int vaddr, int size, boolean writing)
 	throws MipsException {
 	if (Lib.test(dbgProcessor))
-	    System.out.println("\ttranslate vaddr=0x" + Lib.toHexString(vaddr)
+	    System.err.println("\ttranslate vaddr=0x" + Lib.toHexString(vaddr)
 			       + (writing ? ", write" : ", read..."));
 
 	// check alignment
@@ -358,7 +358,7 @@ public final class Processor {
 	int paddr = (ppn*pageSize) + offset;
 
 	if (Lib.test(dbgProcessor))
-	    System.out.println("\t\tpaddr=0x" + Lib.toHexString(paddr));	
+	    System.err.println("\t\tpaddr=0x" + Lib.toHexString(paddr));	
 	return paddr;
     }
 
@@ -373,7 +373,7 @@ public final class Processor {
      */
     private int readMem(int vaddr, int size) throws MipsException {
 	if (Lib.test(dbgProcessor))
-	    System.out.println("\treadMem vaddr=0x" + Lib.toHexString(vaddr)
+	    System.err.println("\treadMem vaddr=0x" + Lib.toHexString(vaddr)
 			       + ", size=" + size);
 
 	Lib.assertTrue(size==1 || size==2 || size==4);
@@ -382,7 +382,7 @@ public final class Processor {
 				   size);
 
 	if (Lib.test(dbgProcessor))
-	    System.out.println("\t\tvalue read=0x" +
+	    System.err.println("\t\tvalue read=0x" +
 			       Lib.toHexString(value, size*2));
 	
 	return value;
@@ -400,7 +400,7 @@ public final class Processor {
     private void writeMem(int vaddr, int size, int value)
 	throws MipsException {
 	if (Lib.test(dbgProcessor))
-	    System.out.println("\twriteMem vaddr=0x" + Lib.toHexString(vaddr)
+	    System.err.println("\twriteMem vaddr=0x" + Lib.toHexString(vaddr)
 			       + ", size=" + size + ", value=0x"
 			       + Lib.toHexString(value, size*2));
 
@@ -590,7 +590,7 @@ public final class Processor {
 		writeRegister(regBadVAddr, badVAddr);
 
 	    if (Lib.test(dbgDisassemble) || Lib.test(dbgFullDisassemble))
-		System.out.println("exception: " + exceptionNames[cause]);
+		System.err.println("exception: " + exceptionNames[cause]);
 
 	    finishLoad();
 
@@ -623,7 +623,7 @@ public final class Processor {
 	private void fetch() throws MipsException {
 	    if ((Lib.test(dbgDisassemble) && !Lib.test(dbgProcessor)) ||
 		Lib.test(dbgFullDisassemble))
-		System.out.print("PC=0x" + Lib.toHexString(registers[regPC])
+		System.err.print("PC=0x" + Lib.toHexString(registers[regPC])
 				 + "\t");
 
 	    value = readMem(registers[regPC], 4);
@@ -725,11 +725,11 @@ public final class Processor {
 	private void print() {
 	    if (Lib.test(dbgDisassemble) && Lib.test(dbgProcessor) &&
 		!Lib.test(dbgFullDisassemble))
-		System.out.print("PC=0x" + Lib.toHexString(registers[regPC])
+		System.err.print("PC=0x" + Lib.toHexString(registers[regPC])
 				 + "\t");
 	    
 	    if (operation == Mips.INVALID) {
-		System.out.print("invalid: op=" + Lib.toHexString(op, 2) +
+		System.err.print("invalid: op=" + Lib.toHexString(op, 2) +
 				 " rs=" + Lib.toHexString(rs, 2) +
 				 " rt=" + Lib.toHexString(rt, 2) +
 				 " rd=" + Lib.toHexString(rd, 2) +
@@ -745,33 +745,33 @@ public final class Processor {
 	    String instname = name.substring(0, spaceIndex);
 	    char[] args = name.substring(spaceIndex+1).toCharArray();
 
-	    System.out.print(instname + "\t");
+	    System.err.print(instname + "\t");
 
 	    int minCharsPrinted = 0, maxCharsPrinted = 0;
 
 	    for (int i=0; i<args.length; i++) {
 		switch (args[i]) {
 		case Mips.RS:
-		    System.out.print("$" + rs);
+		    System.err.print("$" + rs);
 		    minCharsPrinted += 2;
 		    maxCharsPrinted += 3;
 		    
 		    if (Lib.test(dbgFullDisassemble)) {
-			System.out.print("#0x" +
+			System.err.print("#0x" +
 					 Lib.toHexString(registers[rs]));
 			minCharsPrinted += 11;
 			maxCharsPrinted += 11;
 		    }
 		    break;
 		case Mips.RT:
-		    System.out.print("$" + rt);
+		    System.err.print("$" + rt);
 		    minCharsPrinted += 2;
 		    maxCharsPrinted += 3;
 
 		    if (Lib.test(dbgFullDisassemble) &&
 			(i!=0 || !test(Mips.DST)) &&
 			!test(Mips.DELAYEDLOAD)) {
-			System.out.print("#0x" +
+			System.err.print("#0x" +
 					 Lib.toHexString(registers[rt]));
 			minCharsPrinted += 11;
 			maxCharsPrinted += 11;
@@ -781,36 +781,36 @@ public final class Processor {
 		    if (rd == 31)
 			continue;
 		case Mips.RD:
-		    System.out.print("$" + rd);
+		    System.err.print("$" + rd);
 		    minCharsPrinted += 2;
 		    maxCharsPrinted += 3;
 		    break;
 		case Mips.IMM:
-		    System.out.print(imm);
+		    System.err.print(imm);
 		    minCharsPrinted += 1;
 		    maxCharsPrinted += 6;
 		    break;
 		case Mips.SHIFTAMOUNT:
-		    System.out.print(sh);
+		    System.err.print(sh);
 		    minCharsPrinted += 1;
 		    maxCharsPrinted += 2;
 		    break;
 		case Mips.ADDR:
-		    System.out.print(imm + "($" + rs);
+		    System.err.print(imm + "($" + rs);
 		    minCharsPrinted += 4;
 		    maxCharsPrinted += 5;
 
 		    if (Lib.test(dbgFullDisassemble)) {
-			System.out.print("#0x" +
+			System.err.print("#0x" +
 					 Lib.toHexString(registers[rs]));
 			minCharsPrinted += 11;
 			maxCharsPrinted += 11;
 		    }
 		    
-		    System.out.print(")");
+		    System.err.print(")");
 		    break;
 		case Mips.TARGET:
-		    System.out.print("0x" + Lib.toHexString(jtarget));
+		    System.err.print("0x" + Lib.toHexString(jtarget));
 		    minCharsPrinted += 10;
 		    maxCharsPrinted += 10;
 		    break;
@@ -818,7 +818,7 @@ public final class Processor {
 		    Lib.assertTrue(false);    
 		}
 		if (i+1 < args.length) {
-		    System.out.print(", ");
+		    System.err.print(", ");
 		    minCharsPrinted += 2;
 		    maxCharsPrinted += 2;
 		}
@@ -829,12 +829,12 @@ public final class Processor {
 		    // longest string is stj, which is 40-42 chars w/ -d M;
 		    // go for 48
 		    while ((minCharsPrinted%8) != 0) {
-			System.out.print(" ");
+			System.err.print(" ");
 			minCharsPrinted++;
 			maxCharsPrinted++;
 		    }
 		    while (minCharsPrinted < 48) {
-			System.out.print("\t");
+			System.err.print("\t");
 			minCharsPrinted += 8;
 		    }
 		}
@@ -842,7 +842,7 @@ public final class Processor {
 
 	    if (Lib.test(dbgDisassemble) && Lib.test(dbgProcessor) &&
 		!Lib.test(dbgFullDisassemble))
-		System.out.print("\n");
+		System.err.print("\n");
 	}
 
 	private void execute() throws MipsException {
@@ -1034,9 +1034,9 @@ public final class Processor {
 
 	    if ((test(Mips.DST) || test(Mips.DELAYEDLOAD)) && dstReg != 0) {
 		if (Lib.test(dbgFullDisassemble)) {
-		    System.out.print("#0x" + Lib.toHexString((int) dst));
+		    System.err.print("#0x" + Lib.toHexString((int) dst));
 		    if (test(Mips.DELAYEDLOAD))
-			System.out.print(" (delayed load)");
+			System.err.print(" (delayed load)");
 		}
 	    }
 
@@ -1048,7 +1048,7 @@ public final class Processor {
 
 	    if ((Lib.test(dbgDisassemble) && !Lib.test(dbgProcessor)) ||
 		Lib.test(dbgFullDisassemble))
-		System.out.print("\n");
+		System.err.print("\n");
 	}
     
 	// state used to execute a single instruction

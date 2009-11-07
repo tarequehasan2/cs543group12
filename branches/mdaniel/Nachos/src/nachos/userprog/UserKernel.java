@@ -159,7 +159,7 @@ public class UserKernel extends ThreadedKernel {
      * @param numPages the number of pages you require.
      * @return the <b>physical</b> page numbers
      */
-    int[] malloc(int numPages) {
+    public int[] malloc(int numPages) {
     	int[] result;
     	freePagesL.acquire();
     	if (numPages > freePages.size()) {
@@ -181,7 +181,7 @@ public class UserKernel extends ThreadedKernel {
      * Deallocates the <b>physical</b> page numbers provided. 
      * @param pages the array of <b>physical</b> page numbers.
      */
-    void free(int[] pages) {
+    public void free(int[] pages) {
     	if (null == pages || 0 == pages.length) {
     		return;
     	}
