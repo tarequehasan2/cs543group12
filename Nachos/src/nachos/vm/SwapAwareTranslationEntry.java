@@ -29,6 +29,22 @@ public class SwapAwareTranslationEntry
         dirty = entry.dirty;
     }
 
+    /**
+     * Adapts this object back to a <em>new instance</em> of a TranslationEntry.
+     * @return a newly constructed TranslationEntry which contains a subset
+     * of this object's values.
+     */
+    public TranslationEntry toTranslationEntry() {
+        TranslationEntry result = new TranslationEntry();
+        result.vpn = vpn;
+        result.ppn = ppn;
+        result.valid = valid;
+        result.readOnly = readOnly;
+        result.used = used;
+        result.dirty = dirty;
+        return result;
+    }
+
     /** The virtual page number. */
     public int vpn;
 
