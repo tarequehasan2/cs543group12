@@ -73,7 +73,7 @@ public class UserProcess {
     	debug("Loading "+name+" ("+java.util.Arrays.toString(args)+")");
 	if (!load(name, args)) 
 	{
-		debug("load() returned FALSE, so execute() is returning false");
+		error("load() returned FALSE, so execute() is returning false");
 	    return false;
 	}
 	debug( "Forking UThread("+name+")...");
@@ -207,7 +207,7 @@ public class UserProcess {
 		return 0;
 	}
 	if (pageEntry.readOnly) {
-		debug("attempting to write to read-only memory");
+		error("attempting to write to read-only memory");
 		return 0;
 	}
 
@@ -234,7 +234,7 @@ public class UserProcess {
      * @param vaddr the complete virtual address
      * @return the physical address, or -1 if unable to convert the address
      */
-    private int convertVaddrToPaddr(int vaddr) {
+    protected int convertVaddrToPaddr(int vaddr) {
 		int vPageNumber = Processor.pageFromAddress(vaddr);
 		int pageAddress = Processor.offsetFromAddress(vaddr);
         if (null == pageTable) {
@@ -256,7 +256,7 @@ public class UserProcess {
 		int pPageNumber = translationEntry.ppn;
 		
 		if (pageAddress < 0 || pageAddress >= Processor.pageSize) {
-			debug("bogus pageAddress: "+pageAddress);
+			error("bogus pageAddress: "+pageAddress);
 		    return -1;
 		}
 
@@ -274,12 +274,12 @@ public class UserProcess {
      * @param	args	the arguments to pass to the executable.
      * @return	<tt>true</tt> if the executable was successfully loaded.
      */
-    private boolean load(String name, String[] args) {
+    protected boolean load(String name, String[] args) {
 	debug( "UserProcess.load(\"" + name + "\")");
 	
 	OpenFile executable = ThreadedKernel.fileSystem.open(name, false);
 	if (executable == null) {
-	    debug( "\topen failed");
+	    error( "\topen failed");
 	    return false;
 	}
 
@@ -333,11 +333,15 @@ public class UserProcess {
 	try {
 		allocPageTable();
 	} catch (IllegalArgumentException iae) {
+        error("Unable to alloc Page Table: ");
+        iae.printStackTrace(System.err);
 		return false;
 	}
 
-	if (!loadSections())
+	if (!loadSections()) {
+        error("loadSections returned false, so is load()");
 	    return false;
+    }
 
 	// store arguments in last page
 	int entryOffset = (numPages-1)*pageSize;
@@ -415,7 +419,7 @@ public class UserProcess {
     	}
     }    
 
-	private void allocPageTable() {
+	protected void allocPageTable() {
 		pageTable = new TranslationEntry[numPages];
 		int[] freePages = ((UserKernel)Kernel.kernel).malloc(numPages);
 		if (null == freePages) {
@@ -639,7 +643,7 @@ public class UserProcess {
 		}
 		int result = outputFile.write(data, 0, data.length);
 		if (data.length != result) {
-			debug("bogus write; "+result+" <> "+data.length);
+			error("bogus write; "+result+" <> "+data.length);
 		} 
 		return result;
  	}
@@ -871,7 +875,7 @@ public class UserProcess {
 			arguments[i]=argument;
 			currentVaddr += SIZEOF_INT;
 		}
-		UserProcess child = new UserProcess();
+		UserProcess child = newUserProcess();
 		debug("execte("+fileName+","+java.util.Arrays.toString(arguments)+")");
 		boolean executed = child.execute(fileName, arguments);
 		child.parentProcess = this;
@@ -958,7 +962,7 @@ public class UserProcess {
 		handleExit(-1);
 		break;
 	default:
-	    debug("Unexpected exception: " + Processor.exceptionNames[cause]);
+	    error("Unexpected exception: " + Processor.exceptionNames[cause]);
 	    handleExit(-1);
 	    Lib.assertNotReached("Unexpected exception");
 	}
