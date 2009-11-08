@@ -19,8 +19,8 @@ public class SwapFile {
     private static final int SWAP_FRAME_SIZE = Processor.pageSize;
     private static final FileSystem fileSystem;
 	private static final OpenFile swap;
-    /** Contains the file offset for each page, mapped by per-process vpn. */
-	private static final Map<Integer, Map<Integer, Integer>> positions;
+    /** Contains the file offset for each page, mapped by swap page number. */
+	private static final Map<Integer, Integer> positions;
 	private static final Lock lock;
     /** Contains a list of integers which,
      * when multiplied by {@link Processor#pageSize},
@@ -31,73 +31,72 @@ public class SwapFile {
 	static {
         fileSystem = Machine.stubFileSystem();
         swap = fileSystem.open(SWAP_FILE_NAME, true);
-		positions = new HashMap<Integer, Map<Integer, Integer>>();
+		positions = new HashMap<Integer, Integer>();
 		lock = new Lock();
 		freePages = new LinkedList<Integer>();
+        // don't add any, because the swap is initially zero sized
+        // and thus no free pages; don't worry, we'll add some
 	}
-
-	public boolean contains(int pid, int ppn) {
-        return positions.containsKey(pid) &&
-                positions.get(pid).containsKey(ppn);
-    }
 
     /**
      * Reads the specified physical frame
      * (used by the specified process) back into main memory.
-     * @param pid the process for whom we are swapping the frame.
-     * @param ppn the physical frame to roll-in.
+     * <b>WARNING</b>: it is expected you have protected the page in memory
+     * into which this function will write.
+     * I do not lock memory, but I do lock myself.
+     * @param spn the swap page frame to roll-into memory.
+     * @param ppn the physical frame into which it should roll-in.
      * @return true if ok, false otherwise.
      */
-	public static boolean rollIn(int pid, int ppn) {
+	public static boolean rollIn(int spn, int ppn) {
 		lock.acquire();
 
-        Map<Integer, Integer> pageMap = positions.get(pid);
-        if (null == pageMap) {
-            error("Unable to find persisted page "+ppn+" for pid "+pid);
+        if (! positions.containsKey(spn)) {
+            error("Unable to find persisted page "+spn);
             lock.release();
             return false;
         }
-        final int slotNumber = pageMap.get(ppn);
-        final int pos = slotNumber * SWAP_FRAME_SIZE;
+        final int pos = positions.get(spn);
         final byte[] memory = Machine.processor().getMemory();
-        final int memoryOffset = ppn * SWAP_FRAME_SIZE;
+        final int memoryOffset = ppn * Processor.pageSize;
         /// WARNING: if you encoded metadata, ensure you bump the pos
         /// before calling this or you'll smash your metadata in the swap
         final int bytesRead =
                 swap.read(pos, memory, memoryOffset, SWAP_FRAME_SIZE);
         if (bytesRead != SWAP_FRAME_SIZE) {
             error("Incorrect read size; expected "
-                    +SWAP_FRAME_SIZE+" but wrote "+bytesRead);
+                    +SWAP_FRAME_SIZE+" but read "+bytesRead);
             lock.release();
             return false;
         }
 
         // now free up that slot for someone else, since the process shouldn't
         // be asking for the same frame twice
-        freePages.add(slotNumber);
+        freePages.add(spn);
 
 		lock.release();
 		return true;
 	}
 
     /**
-     * Writes the specified in-memory physical frame
-     * (used by the specified process) to persistent storage.
-     * @param pid the process for whom we are swapping the frame.
+     * Writes the specified in-memory physical frame to persistent storage.
+     * <b>WARNING</b>: it is expected you have protected the page in memory
+     * from which this function will read.
+     * I do not lock memory, but I do lock myself.
      * @param ppn the physical frame to roll-out.
-     * @return true if ok, false otherwise.
+     * @return the swap page number, or -1 on error.
      */
-	public static boolean rollOut(int pid, int ppn) {
+	public static int rollOut(int ppn) {
 		lock.acquire();
         if (freePages.isEmpty()) {
             // it's like printing money, eh?
             int inUse = swap.length() / SWAP_FRAME_SIZE;
             freePages.add(inUse + 1);
         }
-        int nextPosition = freePages.removeFirst();
-        final int pos = nextPosition * SWAP_FRAME_SIZE;
+        int nextSlot = freePages.removeFirst();
+        final int pos = nextSlot * SWAP_FRAME_SIZE;
         final byte[] memory = Machine.processor().getMemory();
-        final int memoryOffset = ppn * SWAP_FRAME_SIZE;
+        final int memoryOffset = ppn * Processor.pageSize;
         /// WARNING: if you encode metadata, ensure you bump the pos
         /// before calling this or you'll write metadata into main memory
         final int written = swap.write(pos, memory, memoryOffset, SWAP_FRAME_SIZE);
@@ -105,20 +104,27 @@ public class SwapFile {
             error("Incorrect write size; expected "
                     +SWAP_FRAME_SIZE+" but wrote "+written);
 		    lock.release();
-			return false;
+			return -1;
 		}
-        
-        Map<Integer, Integer> pageMap = positions.get(pid);
-        if (null == pageMap) {
-            pageMap = new HashMap<Integer, Integer>();
-            positions.put(pid, pageMap);
-        }
-        pageMap.put(ppn, nextPosition);
-        
+        positions.put(nextSlot, pos);
         lock.release();
-		return true;
+		return nextSlot;
 	}
 
+    /**
+     * Allows one to release swap pages without rolling them back into memory.
+     * @param pages the list of swap pages to free.
+     */
+    public static void free(int[] pages) {
+        if (null == pages || 0 == pages.length) {
+            return;
+        }
+        lock.acquire();
+        for (int page : pages) {
+            freePages.add(page);
+        }
+        lock.release();
+    }
     /**
      * Closes and deletes the SwapFile.
      */
@@ -130,24 +136,6 @@ public class SwapFile {
             error("Unable to remove \"" + SWAP_FILE_NAME + "\"");
         }
         lock.release();
-	}
-
-    /**
-     * Frees the pages which were persisted for the process identified
-     * by the given pid.
-     * @param pid the process whose pages should be freed from the swap.
-     */
-	public static void free(int pid){
-		lock.acquire();
-        final Map<Integer, Integer> pageMap = positions.get(pid);
-        if (null == pageMap || pageMap.isEmpty()){
-			lock.release();
-			return;
-		}
-        for (Integer offset : pageMap.values()) {
-            freePages.add(offset);
-        }
-		lock.release();
 	}
 
     static void error(String msg) {

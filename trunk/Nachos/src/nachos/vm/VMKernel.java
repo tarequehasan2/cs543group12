@@ -28,6 +28,7 @@ public class VMKernel extends UserKernel {
     public void selfTest() {
         debug("selfTest()");
     	super.selfTest();
+        SwapFileTest.selfTest();
     }
 
     /**
@@ -56,15 +57,6 @@ public class VMKernel extends UserKernel {
         Lib.debug(dbgVM, "DEBUG:VMKernel:"+message);
     }
     
-    /**
-     * Free pages that are owned by the process that is passed in
-     */
-    public static void free(int pid)
-    {
-    	SwapFile.free(pid);
-    }
-    
-
     // dummy variables to make javac smarter
     private static VMProcess dummy1;
 
