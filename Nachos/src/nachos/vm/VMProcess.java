@@ -18,6 +18,7 @@ import nachos.userprog.UserProcess;
  */
 public class VMProcess extends UserProcess
 {
+	private TranslationEntry[] state = new TranslationEntry[Machine.processor().getTLBSize()];
     /**
      * Save the state of this process in preparation for a context switch.
      * Called by <tt>UThread.saveState()</tt>.
@@ -25,6 +26,17 @@ public class VMProcess extends UserProcess
     @Override
     public void saveState() {
         debug("saveState()");
+        debug("TLB: saving state and invalidating");
+        boolean intStatus = Machine.interrupt().disable();
+        _tlbLock.acquire();
+    	for (int i=0; i<Machine.processor().getTLBSize(); i++){
+    		state[i] = Machine.processor().readTLBEntry(i);
+    		TranslationEntry translationEntry = new TranslationEntry(state[i]);
+    		translationEntry.valid = false;
+            Machine.processor().writeTLBEntry(i,translationEntry);
+    	}
+        _tlbLock.release();
+        Machine.interrupt().setStatus(intStatus);
     }
 
     /**
@@ -34,19 +46,17 @@ public class VMProcess extends UserProcess
     @Override
     public void restoreState() {
         debug("restoreState()");
-        debug("TLB:flushing");
+        debug("TLB:restoring");
         boolean intStatus = Machine.interrupt().disable();
         _tlbLock.acquire();
-        final Processor proc = Machine.processor();
-        final int tlbMax = proc.getTLBSize();
-        for (int i = 0; i < tlbMax; i++) {
-            TranslationEntry entry = proc.readTLBEntry(i);
-            entry.valid = false;
-            proc.writeTLBEntry(i, entry);
-        }
+    	for (int i=0; i<Machine.processor().getTLBSize(); i++){
+    		if (state[i] != null){
+    		Machine.processor().writeTLBEntry(i, state[i]);
+    		}
+    	}
         _tlbLock.release();
         Machine.interrupt().setStatus(intStatus);
-        debug("TLB:flush OK");
+        debug("TLB: restored");
     }
 
     /**
