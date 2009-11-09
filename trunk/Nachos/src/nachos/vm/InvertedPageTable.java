@@ -55,6 +55,27 @@ public class InvertedPageTable
         return false;
     }
 
+    public static void free(int pid) {
+        if (!TABLE.containsKey(pid)) {
+            return;
+        }
+        final VMKernel kernel = (VMKernel) Kernel.kernel;
+        final Map<Integer, SwapAwareTranslationEntry> pages = TABLE.get(pid);
+        for (SwapAwareTranslationEntry entry : pages.values()) {
+            final int ppn = entry.ppn;
+            if (entry.valid && -1 != ppn) {
+                kernel.free(new int[] {ppn});
+                clearCoreMapEntry(ppn);
+            }
+        }
+    }
+
+    private static void clearCoreMapEntry(int ppn) {
+        if (CORE_MAP.containsKey(ppn)) {
+            CORE_MAP.get(ppn).clear();
+        }
+    }
+
     private static void overwriteRandomTLB(SwapAwareTranslationEntry entry) {
         Processor proc = Machine.processor();
         int tlbSize = proc.getTLBSize();
@@ -97,6 +118,7 @@ public class InvertedPageTable
                         entry.inSwap = true;
                         entry.swapPageNumber = spn;
                     }
+                    clearCoreMapEntry(victimPPN);
                 }
             } else {
                 // just eject them
@@ -104,6 +126,7 @@ public class InvertedPageTable
                     for (SwapAwareTranslationEntry entry : CORE_MAP.get(victimPPN)) {
                         entry.valid = false;
                     }
+                    clearCoreMapEntry(victimPPN);
                 }
             }
             result = victimPPN;
@@ -149,6 +172,7 @@ public class InvertedPageTable
             pages.put(vpn, sate);
             sate.vpn = vpn;
             sate.valid = false;
+            sate.readOnly = false;
             sate.isStack = true;
         }
         _lock.release();
@@ -167,6 +191,7 @@ public class InvertedPageTable
             SwapAwareTranslationEntry sate = new SwapAwareTranslationEntry();
             pages.put(vpn, sate);
             sate.vpn = vpn;
+            sate.readOnly = section.isReadOnly();
             sate.coffSection = section;
             sate.coffPage = i;
             sate.valid = false;

@@ -84,6 +84,7 @@ public class VMProcess extends UserProcess
     @Override
     protected void unloadSections() {
         debug("unloadSections()");
+        InvertedPageTable.free(getPid());
         SwapFile.free( InvertedPageTable.findAllSwapPagesByPid(getPid()) );
     }
 
