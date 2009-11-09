@@ -1,5 +1,6 @@
 package nachos.vm;
 
+import nachos.machine.Coff;
 import nachos.machine.Lib;
 import nachos.machine.Machine;
 import nachos.machine.Processor;
@@ -84,8 +85,9 @@ public class VMProcess extends UserProcess
     @Override
     protected void unloadSections() {
         debug("unloadSections()");
-        InvertedPageTable.free(getPid());
-        SwapFile.free( InvertedPageTable.findAllSwapPagesByPid(getPid()) );
+        final int pid = getPid();
+        InvertedPageTable.free(pid);
+        SwapFile.free( InvertedPageTable.findAllSwapPagesByPid(pid) );
     }
 
     @Override
@@ -94,7 +96,7 @@ public class VMProcess extends UserProcess
         memoryLock.acquire();
         int result;
         int vpn = Processor.pageFromAddress(vaddr);
-        InvertedPageTable.setVirtualUsed(getPid(), vpn);
+        InvertedPageTable.setVirtualUsed(this, vpn);
         result = super.readVirtualMemory(vaddr, data, offset, length);
         memoryLock.release();
         Machine.interrupt().setStatus(intStatus);
@@ -107,7 +109,7 @@ public class VMProcess extends UserProcess
         boolean intStatus = Machine.interrupt().disable();
         memoryLock.acquire();
         int vpn = Processor.pageFromAddress(vaddr);
-        InvertedPageTable.setVirtualWritten(getPid(), vpn);
+        InvertedPageTable.setVirtualWritten(this, vpn);
         result = super.writeVirtualMemory(vaddr, data, offset, length);
         memoryLock.release();
         Machine.interrupt().setStatus(intStatus);
@@ -116,7 +118,8 @@ public class VMProcess extends UserProcess
 
     @Override
     protected TranslationEntry getTranslationEntryForVirtualPage(int vpn) {
-        final TranslationEntry entry = InvertedPageTable.getTranslationEntryForVirtualPage(getPid(), vpn);
+        final TranslationEntry entry = InvertedPageTable
+                .getTranslationEntryForVirtualPage(getPid(), vpn);
         if (null == entry) {
             error("Unmapped page table entry for VPN: "+vpn);
             return null; // kaboom!
@@ -128,14 +131,19 @@ public class VMProcess extends UserProcess
     protected int convertVaddrToPaddr(int vaddr) {
 		int vPageNumber = Processor.pageFromAddress(vaddr);
 		int pageAddress = Processor.offsetFromAddress(vaddr);
-		TranslationEntry translationEntry = getTranslationEntryForVirtualPage(vPageNumber);
+		TranslationEntry translationEntry
+                = getTranslationEntryForVirtualPage(vPageNumber);
 		if (null == translationEntry) {
 			// TODO: bus error? page fault?
 			error("Unmapped page table entry for VPN "+vPageNumber);
 			return -1;
 		}
-		// TODO: validity check?
 		int pPageNumber = translationEntry.ppn;
+
+        if (0 > pPageNumber || pPageNumber >= Machine.processor().getNumPhysPages()) {
+            error("physical page out of bounds: "+pPageNumber);
+            return -1;
+        }
 
 		if (pageAddress < 0 || pageAddress >= Processor.pageSize) {
 			error("bogus pageAddress: "+pageAddress);
@@ -144,6 +152,10 @@ public class VMProcess extends UserProcess
 
 		return Processor.makeAddress(pPageNumber, pageAddress);
 	}
+
+    Coff getCoff() {
+        return coff;
+    }
 
     /**
      * Handle a user exception. Called by
@@ -181,7 +193,7 @@ public class VMProcess extends UserProcess
         boolean intStatus = Machine.interrupt().disable();
         int page = Processor.pageFromAddress(vaddr);
         debug("vaddr("+Integer.toHexString(vaddr)+"):=pid="+getPid()+";vpn="+page);
-        if (!InvertedPageTable.handleTLBMiss(getPid(), page)) {
+        if (!InvertedPageTable.handleTLBMiss(this, page)) {
             error("Unable to handle TLB miss");
         }
         Machine.interrupt().setStatus(intStatus);
@@ -192,12 +204,11 @@ public class VMProcess extends UserProcess
     }
 
 	private void debug(String message) {
-        Lib.debug(dbgVM,"DEBUG:"+toString()+":"+message);
+        Lib.debug(dbgProcess,"DEBUG:"+toString()+":"+message);
     }
 
 //    private static final int pageSize = Processor.pageSize;
-//    private static final char dbgProcess = 'a';
-    private static final char dbgVM = 'v';
+    private static final char dbgProcess = 'a';
     private static final Lock tlbLock = new Lock();
     private static final Lock memoryLock = new Lock();
 }

@@ -16,13 +16,28 @@ import nachos.threads.Lock;
 
 public class InvertedPageTable
 {
-    public static boolean handleTLBMiss(int pid, int page) {
+    public static boolean handleTLBMiss(VMProcess process, int page) {
+        boolean result = loadEntry(process, page);
+        if (! result) {
+            error("LoadEntry("+process+","+page+") failed");
+            return result;
+        }
+        final int pid = process.getPid();
         final SwapAwareTranslationEntry entry = getEntryFor(pid, page);
+        if (null == entry) {
+            error("loadEntry but no getEntryFor ("+pid+","+page+")");
+            return false;
+        }
+        overwriteRandomTLB(entry);
+        return result;
+    }
+
+    public static boolean loadEntry(VMProcess process, int page) {
+        final SwapAwareTranslationEntry entry = getEntryFor(process.getPid(), page);
         if (null == entry) {
             return false;
         }
         if (entry.valid) {
-            overwriteRandomTLB(entry);
             return true;
         }
         if (entry.isStack) {
@@ -31,7 +46,6 @@ public class InvertedPageTable
             initializePage(ppn);
             addToCoreMap(ppn, entry);
             entry.valid = true;
-            overwriteRandomTLB(entry);
             return true;
         }
         if (entry.inSwap) {
@@ -40,16 +54,17 @@ public class InvertedPageTable
             entry.ppn = ppn;
             addToCoreMap(ppn, entry);
             entry.valid = true;
-            overwriteRandomTLB(entry);
             return true;
         }
-        if (null != entry.coffSection) {
+        if (entry.isCoff) {
             int ppn = mallocOrSwap();
-            entry.coffSection.loadPage(entry.coffPage, ppn);
+            // this will Lib.assert() if the coffSection is out of bounds
+            final CoffSection section = process.getCoff()
+                    .getSection(entry.coffSection);
+            section.loadPage(entry.coffPage, ppn);
             entry.ppn = ppn;
             addToCoreMap(ppn, entry);
             entry.valid = true;
-            overwriteRandomTLB(entry);
             return true;
         }
         return false;
@@ -153,7 +168,7 @@ public class InvertedPageTable
         return algorithm.findVictim();
     }
 
-    public static void addCoff(int pid, Coff coff, int stackFrameCount) {
+    public static void addCoff(int pid, Coff coff, int stackSize) {
         _lock.acquire();
         int sectionCount = coff.getNumSections();
         int pageCount = 0;
@@ -162,10 +177,11 @@ public class InvertedPageTable
         }
         for (int i = 0; i < sectionCount; i++) {
             final CoffSection section = coff.getSection(i);
-            addCoffSection(pid, section);
+            addCoffSection(pid, section, i);
             pageCount += section.getLength();
         }
         final Map<Integer, SwapAwareTranslationEntry> pages = TABLE.get(pid);
+        final int stackFrameCount = stackSize + 1; // for the arguments
         for (int i = 0; i < stackFrameCount; i++) {
             int vpn = pageCount + i;
             SwapAwareTranslationEntry sate = new SwapAwareTranslationEntry();
@@ -178,7 +194,7 @@ public class InvertedPageTable
         _lock.release();
     }
 
-    public static void addCoffSection(int pid, CoffSection section) {
+    public static void addCoffSection(int pid, CoffSection section, int sectionNumber) {
         Lib.assertTrue(_lock.isHeldByCurrentThread());
         if (!TABLE.containsKey(pid)) {
             TABLE.put(pid, new HashMap<Integer, SwapAwareTranslationEntry>());
@@ -192,28 +208,39 @@ public class InvertedPageTable
             pages.put(vpn, sate);
             sate.vpn = vpn;
             sate.readOnly = section.isReadOnly();
-            sate.coffSection = section;
+            sate.isCoff = true;
+            sate.coffSection = sectionNumber;
             sate.coffPage = i;
             sate.valid = false;
         }
     }
 
-    public static void setVirtualUsed(int pid, int vpn) {
+    public static void setVirtualUsed(VMProcess process, int vpn) {
         _lock.acquire();
+        final int pid = process.getPid();
         SwapAwareTranslationEntry entry = getEntryFor(pid, vpn);
         if (null == entry) {
+            error("no entry for ("+pid+","+vpn+"):\r\n"+TABLE.get(pid));
         	_lock.release();
             return;
+        }
+        if (!entry.valid) {
+            if (!loadEntry(process, vpn)) {
+                error("unable to load \"used\" entry for ("+pid+","+vpn+"):\r\n"
+                                +TABLE.get(pid));
+            }
         }
         entry.used = true;
         _lock.release();
     }
 
-    public static void setVirtualWritten(int pid, int vpn) {
-        setVirtualUsed(pid, vpn);
+    public static void setVirtualWritten(VMProcess process, int vpn) {
+        final int pid = process.getPid();
+        setVirtualUsed(process, vpn);
         _lock.acquire();
         SwapAwareTranslationEntry entry = getEntryFor(pid, vpn);
         if (null == entry) {
+            error("no entry for ("+pid+","+vpn+"):\r\n"+TABLE.get(pid));
         	_lock.release();
             return;
         }
@@ -224,6 +251,7 @@ public class InvertedPageTable
     public static TranslationEntry getTranslationEntryForVirtualPage(int pid, int vpn) {
         final SwapAwareTranslationEntry entry = getEntryFor(pid, vpn);
         if (null == entry) {
+            error("no entry for ("+pid+","+vpn+"):\r\n"+TABLE.get(pid));
             return null;
         }
         return entry.toTranslationEntry();
@@ -270,10 +298,19 @@ public class InvertedPageTable
         return pages.get(vpn);
     }
 
+    private static void error(String msg) {
+        System.err.println("ERROR:IPT:"+msg);
+    }
+
+//    private static void debug(String msg) {
+//        Lib.debug(dbgVM, "DEBUG:IPT:"+msg);
+//    }
+
     private static Map<Integer, Map<Integer, SwapAwareTranslationEntry>>
         TABLE = new HashMap<Integer, Map<Integer, SwapAwareTranslationEntry>>();
     private static Map<Integer, List<SwapAwareTranslationEntry>>
         CORE_MAP = new HashMap<Integer, List<SwapAwareTranslationEntry>>();
     private static Lock _lock = new Lock();
     private static Algorithm algorithm = new RandomAlgorithm(CORE_MAP, _lock);
+//    private static final char dbgVM = 'v';
 }
