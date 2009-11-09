@@ -200,7 +200,7 @@ public class UserProcess {
 	Lib.assertTrue(offset >= 0 && length >= 0 && offset+length <= data.length);
 
 	int vPageNumber = Processor.pageFromAddress(vaddr);
-	TranslationEntry pageEntry = pageTable[vPageNumber];
+	TranslationEntry pageEntry = getTranslationEntryForVirtualPage(vPageNumber);
 	if (null == pageEntry) {
 		error("Attempting to write to an unmapped page");
 		// TODO: signal page fault? bus error?
@@ -225,6 +225,10 @@ public class UserProcess {
 	System.arraycopy(data, offset, memory, paddr, amount);
 
 	return amount;
+    }
+
+    protected TranslationEntry getTranslationEntryForVirtualPage(int vpn) {
+        return pageTable[vpn];
     }
 
     /**

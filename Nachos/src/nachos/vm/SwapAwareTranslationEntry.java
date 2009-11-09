@@ -5,6 +5,11 @@ import nachos.machine.TranslationEntry;
 
 public class SwapAwareTranslationEntry
 {
+    /**
+     * Initializes all integer values to -1,
+     * all booleans to false except readOnly
+     * and all object references to null.
+     */
     public SwapAwareTranslationEntry() {
         vpn = -1;
         ppn = -1;
@@ -18,7 +23,12 @@ public class SwapAwareTranslationEntry
         coffSection = null;
         coffPage = -1;
     }
-    
+
+    /**
+     * Honors the same rules as {@link SwapAwareTranslationEntry()} but
+     * then initializes the fields to the values found in entry.
+     * @param entry the entry who's values we should assume.
+     */
     public SwapAwareTranslationEntry(TranslationEntry entry) {
         this();
         vpn = entry.vpn;
