@@ -1,6 +1,5 @@
 package nachos.vm;
 
-import nachos.machine.CoffSection;
 import nachos.machine.TranslationEntry;
 
 public class SwapAwareTranslationEntry
@@ -20,7 +19,8 @@ public class SwapAwareTranslationEntry
         used = false;
         dirty = false;
         swapPageNumber = -1;
-        coffSection = null;
+        isCoff = false;
+        coffSection = -1;
         coffPage = -1;
     }
 
@@ -53,6 +53,22 @@ public class SwapAwareTranslationEntry
         result.used = used;
         result.dirty = dirty;
         return result;
+    }
+
+    @Override
+    public String toString() {
+        return "SATE[vpn=" + vpn
+                +";ppn=" + ppn
+                +";valid=" + valid
+                +";readOnly=" + readOnly
+                +";used=" + used
+                +";dirty=" + dirty
+                +";inSwap=" + inSwap
+                +";swapPN=" + swapPageNumber
+                +";stack?"+isStack
+                +";coff?"+isCoff
+                +";coffSection="+coffSection
+                +";coffPage="+coffPage+"]\r\n";
     }
 
     /** The virtual page number. */
@@ -93,12 +109,13 @@ public class SwapAwareTranslationEntry
      * and must be initialized on first use.
      */
     public boolean isStack;
+    public boolean isCoff;
     /**
      * Contains the <em>optional</em> COFF section which contains this page's data.
      * Be advised that a COFF section is usually wider than a single page, so
      * you'll need to consult {@link #coffPage} for any loads.
      */
-    public CoffSection coffSection;
+    public int coffSection;
     /**
      * Identifies the specific page within the COFF section
      * that contains this page's data.
