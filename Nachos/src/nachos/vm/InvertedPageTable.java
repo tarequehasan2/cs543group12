@@ -155,7 +155,7 @@ public class InvertedPageTable
     }
 
     public static void addCoffSection(int pid, CoffSection section) {
-        _lock.acquire();
+        Lib.assertTrue(_lock.isHeldByCurrentThread());
         if (!TABLE.containsKey(pid)) {
             TABLE.put(pid, new HashMap<Integer, SwapAwareTranslationEntry>());
         }
@@ -171,13 +171,13 @@ public class InvertedPageTable
             sate.coffPage = i;
             sate.valid = false;
         }
-        _lock.release();
     }
 
     public static void setVirtualUsed(int pid, int vpn) {
         _lock.acquire();
         SwapAwareTranslationEntry entry = getEntryFor(pid, vpn);
         if (null == entry) {
+        	_lock.release();
             return;
         }
         entry.used = true;
@@ -189,6 +189,7 @@ public class InvertedPageTable
         _lock.acquire();
         SwapAwareTranslationEntry entry = getEntryFor(pid, vpn);
         if (null == entry) {
+        	_lock.release();
             return;
         }
         entry.dirty = true;
