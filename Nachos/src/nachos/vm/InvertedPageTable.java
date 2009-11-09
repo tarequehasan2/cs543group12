@@ -127,7 +127,7 @@ public class InvertedPageTable
     }
 
     protected static int chooseVictimPage() {
-        return Lib.random(Processor.maxPages);
+        return algorithm.findVictim();
     }
 
     public static void addCoff(int pid, Coff coff, int stackFrameCount) {
@@ -250,4 +250,5 @@ public class InvertedPageTable
     private static Map<Integer, List<SwapAwareTranslationEntry>>
         CORE_MAP = new HashMap<Integer, List<SwapAwareTranslationEntry>>();
     private static Lock _lock = new Lock();
+    private static Algorithm algorithm = new RandomAlgorithm(CORE_MAP, _lock);
 }
