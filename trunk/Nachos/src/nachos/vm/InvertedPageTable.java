@@ -286,6 +286,31 @@ public class InvertedPageTable
         }
         return results;
     }
+    
+    public static boolean isPinned(int ppn){
+    	Lib.assertTrue(_lock.isHeldByCurrentThread());
+    	return PINNED.contains(ppn);
+    }
+    
+    public static boolean pin(int ppn){
+    	Lib.assertTrue(_lock.isHeldByCurrentThread());
+    	if (isPinned(ppn)){
+    		return false;
+    	}else{
+    		PINNED.add(ppn);
+    		return true;
+    	}
+    }
+    
+    public static boolean unpin(int ppn){
+    	Lib.assertTrue(_lock.isHeldByCurrentThread());
+    	if (isPinned(ppn)){
+    		PINNED.remove(Integer.valueOf(ppn));
+    		return true;
+    	}else{
+    		return false;
+    	}
+    }
 
     protected static SwapAwareTranslationEntry getEntryFor(int pid, int vpn) {
         if (!TABLE.containsKey(pid)) {
@@ -310,6 +335,7 @@ public class InvertedPageTable
         TABLE = new HashMap<Integer, Map<Integer, SwapAwareTranslationEntry>>();
     private static Map<Integer, List<SwapAwareTranslationEntry>>
         CORE_MAP = new HashMap<Integer, List<SwapAwareTranslationEntry>>();
+    private static List<Integer> PINNED = new ArrayList<Integer>();
     private static Lock _lock = new Lock();
     private static Algorithm algorithm = new RandomAlgorithm(CORE_MAP, _lock);
 //    private static final char dbgVM = 'v';

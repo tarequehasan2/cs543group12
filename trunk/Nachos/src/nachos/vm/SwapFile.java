@@ -11,7 +11,7 @@ import nachos.machine.Processor;
 import nachos.threads.Lock;
 
 public class SwapFile {
-	private static final String SWAP_FILE_NAME = ".swap";
+	private static final String SWAP_FILE_NAME = "swap";
     /**
      * Contains the frame size in the swap file. This will always be 
      * greater than or equal to {@link Processor#pageSize}.
