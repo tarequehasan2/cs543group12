@@ -5,6 +5,7 @@ import java.util.Map;
 
 import nachos.machine.Lib;
 import nachos.machine.Machine;
+import nachos.threads.KThread;
 import nachos.threads.Lock;
 
 public final class RandomAlgorithm implements Algorithm {
@@ -19,11 +20,12 @@ public final class RandomAlgorithm implements Algorithm {
 	
 	@Override
 	public int findVictim() {
-		int victim = Lib.random(Machine.processor().getNumPhysPages());
-		coreMapLock.acquire();
-		Lib.assertTrue(coreMap.containsKey(victim));
-		coreMapLock.release();
+		int victim = -1;
+		do {
+			victim = Lib.random(Machine.processor().getNumPhysPages());
+		} while (InvertedPageTable.isPinned(victim) );
+		InvertedPageTable.pin(victim);
 		return victim;
 	}
-	
+
 }
