@@ -30,6 +30,7 @@ public class VMProcess extends UserProcess
     		state[i] = proc.readTLBEntry(i);
     		TranslationEntry translationEntry = new TranslationEntry(state[i]);
     		translationEntry.valid = false;
+    		translationEntry.readOnly = false;
             proc.writeTLBEntry(i,translationEntry);
     	}
         tlbLock.release();
@@ -183,7 +184,7 @@ public class VMProcess extends UserProcess
 	    }
     }
 
-    @Override
+	@Override
     public String toString() {
         return "VMProcess[pid="+getPid()+"]";
     }

@@ -116,20 +116,30 @@ public class InvertedPageTable
             pages = CORE_MAP.get(ppn);
         }
         pages.add(entry);
+        boolean releaseLock = false;
+        //if (!_lock.isHeldByCurrentThread()){
+      //  	_lock.acquire();
+      //  	releaseLock = true;
+       // }
+        if (isPinned(ppn)){
+        	unpin(ppn);
+        }
+       // if(releaseLock){
+      //  	_lock.release();
+       // }
     }
 
     // TODO: move this into VMKernel and provide support methods here
     protected static int mallocOrSwap() {
         final VMKernel kernel = (VMKernel) Kernel.kernel;
-        int[] pages = kernel.malloc(1);
         int result;
-        if (null == pages || 0 == pages.length) {
             int victimPPN = chooseVictimPage();
             if (doesNeedRollOut(victimPPN)) {
                 int spn = SwapFile.rollOut(victimPPN);
                 if (CORE_MAP.containsKey(victimPPN)) {
                     for (SwapAwareTranslationEntry entry : CORE_MAP.get(victimPPN)) {
                         entry.valid = false;
+                        entry.readOnly = false;
                         entry.inSwap = true;
                         entry.swapPageNumber = spn;
                     }
@@ -140,14 +150,15 @@ public class InvertedPageTable
                 if (CORE_MAP.containsKey(victimPPN)) {
                     for (SwapAwareTranslationEntry entry : CORE_MAP.get(victimPPN)) {
                         entry.valid = false;
+                        entry.readOnly = false;
                     }
                     clearCoreMapEntry(victimPPN);
                 }
             }
             result = victimPPN;
-        } else {
-            result = pages[0];
-        }
+//        } else {
+//            result = pages[0];
+//        }
         return result;
     }
 
@@ -165,6 +176,14 @@ public class InvertedPageTable
     }
 
     protected static int chooseVictimPage() {
+    	for (int i= 0; i < Machine.processor().getNumPhysPages(); i++){
+    		if (!CORE_MAP.containsKey(i)){
+    			if (!isPinned(i)){
+    				pin(i);
+    				return i;
+    			}
+    		}
+    	}
         return algorithm.findVictim();
     }
 
@@ -288,12 +307,10 @@ public class InvertedPageTable
     }
     
     public static boolean isPinned(int ppn){
-    	Lib.assertTrue(_lock.isHeldByCurrentThread());
     	return PINNED.contains(ppn);
     }
     
     public static boolean pin(int ppn){
-    	Lib.assertTrue(_lock.isHeldByCurrentThread());
     	if (isPinned(ppn)){
     		return false;
     	}else{
@@ -303,7 +320,6 @@ public class InvertedPageTable
     }
     
     public static boolean unpin(int ppn){
-    	Lib.assertTrue(_lock.isHeldByCurrentThread());
     	if (isPinned(ppn)){
     		PINNED.remove(Integer.valueOf(ppn));
     		return true;
