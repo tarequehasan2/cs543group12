@@ -28,10 +28,7 @@ public class VMProcess extends UserProcess
         final int tlbSize = proc.getTLBSize();
         for (int i=0; i < tlbSize; i++){
     		state[i] = proc.readTLBEntry(i);
-    		TranslationEntry translationEntry = new TranslationEntry(state[i]);
-    		translationEntry.valid = false;
-    		translationEntry.readOnly = false;
-            proc.writeTLBEntry(i,translationEntry);
+            proc.writeTLBEntry(i,new TranslationEntry());
     	}
         tlbLock.release();
         Machine.interrupt().setStatus(intStatus);
@@ -111,6 +108,7 @@ public class VMProcess extends UserProcess
         memoryLock.acquire();
         int vpn = Processor.pageFromAddress(vaddr);
         InvertedPageTable.setVirtualWritten(this, vpn);
+        InvertedPageTable.setVirtualUsed(this, vpn);
         result = super.writeVirtualMemory(vaddr, data, offset, length);
         memoryLock.release();
         Machine.interrupt().setStatus(intStatus);
@@ -197,7 +195,6 @@ public class VMProcess extends UserProcess
         if (!InvertedPageTable.handleTLBMiss(this, page)) {
             error("Unable to handle TLB miss");
         }
-        Machine.interrupt().setStatus(intStatus);
     }
 
     private void error(String message) {
