@@ -1,8 +1,10 @@
 package nachos.vm;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.Set;
 
 import nachos.machine.FileSystem;
 import nachos.machine.Machine;
@@ -26,14 +28,14 @@ public class SwapFile {
      * when multiplied by {@link Processor#pageSize},
      * will yield the available offsets in the pagefile.
      */
-	private static final LinkedList<Integer> freePages;
+	private static final Set<Integer> freePages;
 
 	static {
         fileSystem = Machine.stubFileSystem();
         swap = fileSystem.open(SWAP_FILE_NAME, true);
 		positions = new HashMap<Integer, Integer>();
 		lock = new Lock();
-		freePages = new LinkedList<Integer>();
+		freePages = new HashSet<Integer>();
         // don't add any, because the swap is initially zero sized
         // and thus no free pages; don't worry, we'll add some
 	}
@@ -93,7 +95,8 @@ public class SwapFile {
             int inUse = swap.length() / SWAP_FRAME_SIZE;
             freePages.add(inUse + 1);
         }
-        int nextSlot = freePages.removeFirst();
+        int nextSlot = freePages.iterator().next();
+        freePages.remove(nextSlot);
         final int pos = nextSlot * SWAP_FRAME_SIZE;
         final byte[] memory = Machine.processor().getMemory();
         final int memoryOffset = ppn * Processor.pageSize;
