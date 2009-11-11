@@ -209,6 +209,7 @@ public class InvertedPageTable
             sate.valid = false;
             sate.readOnly = false;
             sate.isStack = true;
+            sate.pid = pid;
         }
         _lock.release();
     }
@@ -231,6 +232,7 @@ public class InvertedPageTable
             sate.coffSection = sectionNumber;
             sate.coffPage = i;
             sate.valid = false;
+            sate.pid = pid;
         }
     }
 

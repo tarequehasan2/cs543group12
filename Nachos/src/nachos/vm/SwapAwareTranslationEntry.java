@@ -22,6 +22,7 @@ public class SwapAwareTranslationEntry
         isCoff = false;
         coffSection = -1;
         coffPage = -1;
+        pid = -1;
     }
 
     /**
@@ -121,4 +122,6 @@ public class SwapAwareTranslationEntry
      * that contains this page's data.
      */
     public int coffPage;
+    
+    public int pid;
 }
