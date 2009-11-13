@@ -1,6 +1,7 @@
 package nachos.vm;
 
 import nachos.machine.Lib;
+import nachos.threads.Lock;
 import nachos.userprog.UserKernel;
 
 /**
@@ -37,6 +38,11 @@ public class VMKernel extends UserKernel {
      */
     public void run() {
         debug("run()");
+        // I know it looks goofy to initialize a static variable
+        // from an instance method but we can't alloc them statically since
+        // the Machine isn't running at class creation time
+        pageFaultsLock = new Lock();
+        memoryLock = new Lock();
     	super.run();
     }
 
@@ -47,7 +53,27 @@ public class VMKernel extends UserKernel {
         debug("terminate()");
         SwapFile.close();
         debug("closed SwapFile");
+        System.out.println("VMM Paging: page faults "+pageFaults);
     	super.terminate();
+    }
+
+    /**
+     * Indicates there was a page fault. We cannot use the existing Processor
+     * page fault tracking mechanism due to visibility constraints within
+     * Nachos.
+     */
+    public static void recordPageFault() {
+        pageFaultsLock.acquire();
+        pageFaults++;
+        pageFaultsLock.release();
+    }
+
+    public static void lockMemory() {
+        memoryLock.acquire();
+    }
+
+    public static void unlockMemory() {
+        memoryLock.release();
     }
 
 //    private static void error(String message) {
@@ -58,5 +84,10 @@ public class VMKernel extends UserKernel {
         Lib.debug(dbgFlag, "DEBUG:VMKernel:"+message);
     }
 
+    private static int pageFaults;
+    // don't initialize these Locks statically
+    // since the Machine isn't running at Kernel class load time
+    private static Lock pageFaultsLock;
+    private static Lock memoryLock;
     private static final char dbgFlag = 'K';
 }

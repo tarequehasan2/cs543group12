@@ -45,6 +45,9 @@ public class InvertedPageTable
     protected static boolean loadEntry(VMProcess process, int page) {
     	Lib.assertTrue(_lock.isHeldByCurrentThread());
         debug("ENTER:loadEntry("+process+","+page+")");
+
+        /// FIXME: is it worth going through Kernel.kernel and downcasting?
+        VMKernel.recordPageFault();
 		final int pid = process.getPid();
 
 		SwapAwareTranslationEntry entry = findEntryForVpn(pid, page);
@@ -197,9 +200,6 @@ public class InvertedPageTable
         addToSwapTable(pid, entry);
     }
 
-    ////
-    //// FREE
-    ////
     public static void free(int pid) {
         debug("ENTER:free("+pid+")");
         _lock.acquire();
@@ -236,6 +236,15 @@ public class InvertedPageTable
         theTable.remove(pid);
     }
 
+    /**
+     * Replaces the Processor's TLB entry with the value of the provided one.
+     * Technically, we're cheating you with this method name, since it only
+     * reverts to random ejection if it is unable to find a better heuristic
+     * choice. It tries to eject the existing ppn if found, followed by any
+     * already invalid TLB entry, and only then does it revert to random.
+     * @param entry the values to inject into the Processor's TLB at a location
+     * of my choosing.
+     */
     private static void overwriteRandomTLB(SwapAwareTranslationEntry entry) {
     	Lib.assertTrue(_lock.isHeldByCurrentThread());
         debug("ENTER:overwriteRandomTLB("+entry+")");
@@ -730,7 +739,7 @@ public class InvertedPageTable
     private static Map<Integer, Map<Integer, SwapAwareTranslationEntry>>
         SWAP_TABLE = new HashMap<Integer, Map<Integer, SwapAwareTranslationEntry>>();
     private static Lock _lock = new Lock();
- //   private static Algorithm algorithm = new RandomAlgorithm();
-    private static Algorithm algorithm = new ClockAlgorithm();
+    private static Algorithm algorithm = new RandomAlgorithm();
+//    private static Algorithm algorithm = new ClockAlgorithm();
     private static final char dbgFlag = 'I';
 }
