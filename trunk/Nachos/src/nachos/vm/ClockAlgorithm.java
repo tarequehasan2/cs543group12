@@ -61,17 +61,18 @@ public class ClockAlgorithm implements Algorithm{
 				
 			}
 
-			// no unused pages??
-			if (nextVictim == -1){
-				//TODO find minimally used?
-				if (anyUnused > -1){
-					nextVictim = anyUnused;
-				}else{
-					// NO Unused pages??  OK.  I pick this one.
-					nextVictim = Lib.random(numPhysPages);
-				}
+		}
+		// no unused pages??
+		if (nextVictim == -1){
+			//TODO find minimally used?
+			if (anyUnused > -1){
+				nextVictim = anyUnused;
+			}else{
+				// NO Unused pages??  OK.  I pick this one.
+				nextVictim = Lib.random(numPhysPages);
 			}
 		}
+
         victims.remove(Integer.valueOf(nextVictim));
  		return nextVictim;
 	}
