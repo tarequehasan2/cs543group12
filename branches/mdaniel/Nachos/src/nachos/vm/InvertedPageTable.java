@@ -98,9 +98,18 @@ public class InvertedPageTable
     private static void moveEntryFromSwapToMainTable(
             int pid, SwapAwareTranslationEntry entry) {
         debug("ENTER:moveEntryFromSwapToMain("+pid+","+entry+")");
+        Lib.assertTrue(null != entry, "You can't move NULL Entry to the Main table");
         final Map<Integer, SwapAwareTranslationEntry> entryMap
                 = SWAP_TABLE.get(pid);
+        Lib.assertTrue(null != entryMap,
+                "No such Entry in SWAP for pid "+pid
+                        +"\r\nEntry:"+entry
+                        +"\r\n"+SWAP_TABLE);
         SwapAwareTranslationEntry entry2 = entryMap.get(entry.getVpn());
+        Lib.assertTrue(null != entry2,
+                "Unable to find Swap Entry pid("+pid+")\r\n"
+                +"Entry: "+entry
+                +"\r\n"+SWAP_TABLE);
         addToMainTable(pid, entry2);
         entryMap.remove(entry.getVpn());
     }
@@ -108,7 +117,10 @@ public class InvertedPageTable
     private static void moveEntryFromMainToSwapTable(
             int pid, SwapAwareTranslationEntry entry) {
         debug("ENTER:moveEntryFromMainToSwap("+pid+","+entry+")");
+        Lib.assertTrue(null != entry, "You can't move NULL Entry to the Swap table");
         final Map<Integer, SwapAwareTranslationEntry> entryMap = TABLE.get(pid);
+        Lib.assertTrue(null != entryMap,
+                "No such Entry in Main Table for pid "+pid+"\r\n"+TABLE);
         SwapAwareTranslationEntry entry2 = entryMap.get(entry.getVpn());
         addToSwapTable(pid, entry2);
         entryMap.remove(entry.getVpn());
@@ -157,10 +169,18 @@ public class InvertedPageTable
     private static void overwriteRandomTLB(SwapAwareTranslationEntry entry) {
     	Lib.assertTrue(_lock.isHeldByCurrentThread());
         debug("ENTER:overwriteRandomTLB("+entry+")");
+        final int ppn = entry.getPpn();
         final int tlbSize = machine.getTlbSize();
         int victim = -1;
         for (int i = 0; i < tlbSize; i++) {
             TranslationEntry te = machine.readTlbEntry(i);
+            // always choose to overwrite an existing PPN mapping
+            // regardless of its existing validity because if we
+            // are in this method, we have updated information about that ppn
+            if (te.ppn == ppn) {
+                victim = i;
+                break;
+            }
             if (! te.valid) {
                 victim = i;
                 break;
@@ -202,11 +222,13 @@ public class InvertedPageTable
 
     protected static void addToMainTable(int forPid, SwapAwareTranslationEntry entry) {
         debug("ENTER:addToMainTable("+forPid+","+entry+")");
+        Lib.assertTrue(null != entry, "You can't add a NULL Entry to the Main table");
         addToTable(TABLE, forPid, entry);
     }
 
     protected static void addToSwapTable(int forPid, SwapAwareTranslationEntry entry) {
         debug("ENTER:addToSwapTable("+forPid+","+entry+")");
+        Lib.assertTrue(null != entry, "You can't add a NULL Entry to the Swap table");
         addToTable(SWAP_TABLE, forPid, entry);
     }
 
