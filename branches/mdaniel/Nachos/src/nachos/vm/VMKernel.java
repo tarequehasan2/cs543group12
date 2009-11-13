@@ -28,8 +28,8 @@ public class VMKernel extends UserKernel {
     public void selfTest() {
         debug("selfTest()");
     	super.selfTest();
-        SwapFileTest.selfTest();
-        Lib.assertTrue(false, "self test");
+//        SwapFileTest.selfTest();
+//        Lib.assertTrue(false, "self test");
     }
 
     /**
