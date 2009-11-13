@@ -483,7 +483,7 @@ public class UserProcess {
     }
 
 
-    private static final int
+    protected static final int
         syscallHalt = 0,
     	syscallExit = 1,
     	syscallExec = 2,
