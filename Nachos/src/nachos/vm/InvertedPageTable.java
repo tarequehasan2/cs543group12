@@ -428,9 +428,7 @@ public class InvertedPageTable
 
     protected static int chooseVictimPage() {
         int result;
-        _lock.release();
         result = algorithm.findVictim();
-        _lock.acquire();
         return result;
     }
 
@@ -632,7 +630,10 @@ public class InvertedPageTable
     }
 
     public static void syncAllProcTlb() {
-        _lock.acquire();
+    	boolean needLock = !_lock.isHeldByCurrentThread();
+    	if (needLock){
+    		_lock.acquire();
+    	}
         int tlbSize = machine.getTlbSize();
         for (int i = 0; i < tlbSize; i++) {
             final TranslationEntry entry = machine.readTlbEntry(i);
@@ -641,7 +642,9 @@ public class InvertedPageTable
                 syncProcTlb(entry);
             }
         }
-        _lock.release();
+        if (needLock){
+        	_lock.release();
+        }
     }
 
     private static boolean syncProcTlb(TranslationEntry tlbEntry) {
@@ -727,7 +730,7 @@ public class InvertedPageTable
     private static Map<Integer, Map<Integer, SwapAwareTranslationEntry>>
         SWAP_TABLE = new HashMap<Integer, Map<Integer, SwapAwareTranslationEntry>>();
     private static Lock _lock = new Lock();
-    private static Algorithm algorithm = new RandomAlgorithm();
-//    private static Algorithm algorithm = new ClockAlgorithm();
+ //   private static Algorithm algorithm = new RandomAlgorithm();
+    private static Algorithm algorithm = new ClockAlgorithm();
     private static final char dbgFlag = 'I';
 }

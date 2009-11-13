@@ -12,6 +12,8 @@ public class ClockAlgorithm implements Algorithm{
 
 	@Override
 	public int findVictim() {
+		// get the TLB all synced up
+		InvertedPageTable.syncAllProcTlb();
 		int longestUnused = 0;
 		int nextVictim = -1;
 		int anyUnused = -1;
@@ -23,8 +25,8 @@ public class ClockAlgorithm implements Algorithm{
                 SwapAwareTranslationEntry entry
                         = InvertedPageTable.findEntryForVpn(
                             coreEntry.getPid(), coreEntry.getVpn());
-				// If it is used, mark it not used, so that next time we know whether it is used.
-				if (entry.isUsed()){
+				// If it is used, but not dirty, mark it not used, so that next time we know whether it is used.
+				if (entry.isUsed() && !entry.isDirty()){
 					used = true;
 					entry.clearUsedMark();
 				}
