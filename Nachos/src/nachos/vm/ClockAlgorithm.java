@@ -58,7 +58,7 @@ public class ClockAlgorithm implements Algorithm{
 			if (victims.containsKey(i) && longestUnused < victims.get(i)){
 				longestUnused = victims.get(i);
 				nextVictim = i;
-				victims.remove(Integer.valueOf(i));
+				
 			}
 
 			// no unused pages??
@@ -72,7 +72,8 @@ public class ClockAlgorithm implements Algorithm{
 				}
 			}
 		}
-		return nextVictim;
+        victims.remove(Integer.valueOf(nextVictim));
+ 		return nextVictim;
 	}
 
 
