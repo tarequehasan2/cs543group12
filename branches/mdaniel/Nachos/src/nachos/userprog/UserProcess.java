@@ -48,8 +48,8 @@ public class UserProcess {
 	numActiveProcesses++;
 	mutex.release();
     }
-    
-    
+
+
     /**
      * Allocate and return a new process of the correct class. The class name
      * is specified by the <tt>nachos.conf</tt> key
@@ -71,7 +71,7 @@ public class UserProcess {
      */
     public boolean execute(String name, String[] args) {
     	debug("Loading "+name+" ("+java.util.Arrays.toString(args)+")");
-	if (!load(name, args)) 
+	if (!load(name, args))
 	{
 		error("load() returned FALSE, so execute() is returning false");
 	    return false;
@@ -160,7 +160,7 @@ public class UserProcess {
 	if (-1 == paddr) {
 		return 0;
 	}
-	
+
 	byte[] memory = Machine.processor().getMemory();
 	int amount = Math.min(length, memory.length - paddr);
 	System.arraycopy(memory, paddr, data, offset, amount);
@@ -215,9 +215,9 @@ public class UserProcess {
 	if (-1 == paddr) {
 		return 0;
 	}
-	
+
 	byte[] memory = Machine.processor().getMemory();
-	
+
 	if (paddr < 0 || paddr >= memory.length)
 	    return 0;
 
@@ -258,7 +258,7 @@ public class UserProcess {
 		}
 		// TODO: validity check?
 		int pPageNumber = translationEntry.ppn;
-		
+
 		if (pageAddress < 0 || pageAddress >= Processor.pageSize) {
 			error("bogus pageAddress: "+pageAddress);
 		    return -1;
@@ -279,8 +279,8 @@ public class UserProcess {
      * @return	<tt>true</tt> if the executable was successfully loaded.
      */
     protected boolean load(String name, String[] args) {
-	debug( "UserProcess.load(\"" + name + "\")");
-	
+	debug( "UserProcess.load(\"" + name + "\","+java.util.Arrays.toString(args)+")");
+
 	OpenFile executable = ThreadedKernel.fileSystem.open(name, false);
 	if (executable == null) {
 	    error( "\topen failed");
@@ -325,7 +325,7 @@ public class UserProcess {
 	// program counter initially points at the program entry point
 	// N.B. this does not need to be translated in the Kernel because
 	// the Processor uses our pageTable to translate the address
-	initialPC = coff.getEntryPoint();	
+	initialPC = coff.getEntryPoint();
 
 	// next comes the stack; stack pointer initially points to top of it
 	numPages += stackPages;
@@ -353,7 +353,7 @@ public class UserProcess {
 
 	this.argc = args.length;
 	this.argv = entryOffset;
-	
+
 	for (int i=0; i<argv.length; i++) {
 	    byte[] stringOffsetBytes = Lib.bytesFromInt(stringOffset);
 	    Lib.assertTrue(writeVirtualMemory(entryOffset,stringOffsetBytes) == SIZEOF_INT);
@@ -364,7 +364,7 @@ public class UserProcess {
 	    Lib.assertTrue(writeVirtualMemory(stringOffset,new byte[] { 0 }) == 1);
 	    stringOffset += 1;
 	}
-	
+
 	// open stdin and stdout
 	fileDescriptors[0] = UserKernel.console.openForReading();
 	filePositions[0] = 0;
@@ -388,11 +388,11 @@ public class UserProcess {
 	    error( "\tinsufficient physical memory");
 	    return false;
 	}
-	
+
 	// load sections
 	for (int s=0; s<coff.getNumSections(); s++) {
 	    CoffSection section = coff.getSection(s);
-	    
+
 	    debug( "\tinitializing " + section.getName()
 		      + " section (" + section.getLength() + " pages)");
 
@@ -410,7 +410,7 @@ public class UserProcess {
 		section.loadPage(i, translationEntry.ppn);
 	    }
 	}
-	
+
 	return true;
     }
 
@@ -421,7 +421,7 @@ public class UserProcess {
     	for (TranslationEntry page : pageTable) {
     		((UserKernel)Kernel.kernel).free(page.ppn);
     	}
-    }    
+    }
 
 	protected void allocPageTable() {
 		pageTable = new TranslationEntry[numPages];
@@ -469,13 +469,13 @@ public class UserProcess {
     }
 
     /**
-     * Handle the halt() system call. 
+     * Handle the halt() system call.
      */
     private int handleHalt() {
     	debug("handleHalt()");
     	if (pid == 0){
     		Machine.halt();
-	
+
     		Lib.assertNotReached("Machine.halt() did not halt machine!");
     	}
     	// silently fail
@@ -515,7 +515,7 @@ public class UserProcess {
      * <tr><td>8</td><td><tt>int  close(int fd);</tt></td></tr>
      * <tr><td>9</td><td><tt>int  unlink(char *name);</tt></td></tr>
      * </table>
-     * 
+     *
      * @param	syscall	the syscall number.
      * @param	a0	the first syscall argument.
      * @param	a1	the second syscall argument.
@@ -555,7 +555,7 @@ public class UserProcess {
     }
 
     /**
-     * Use the file system to delete the file indicated by 
+     * Use the file system to delete the file indicated by
      * the file name in <tt>a0</tt>
      *
      * @param	a0	the filename of the file to delete
@@ -577,7 +577,7 @@ public class UserProcess {
     			returnStatus = 0;
     		}
     		else{
-    			returnStatus = -1;	
+    			returnStatus = -1;
     		}
     	}
     	catch (Exception ex) {
@@ -588,7 +588,7 @@ public class UserProcess {
 
     /**
      * Close the file object for the file descriptor in <tt>a0</tt>.
-     * This will close the file, remove the descriptor, and 
+     * This will close the file, remove the descriptor, and
      * decrement the number of open files.
      *
      * @param	a0	the file descriptor of the file to close
@@ -614,9 +614,9 @@ public class UserProcess {
 		}
 		return status;
 	}
-	
+
 	/**
-	 * Writes the number of bytes in <tt>a2</tt> 
+	 * Writes the number of bytes in <tt>a2</tt>
 	 * located at <em>memory(<tt>a1</tt>)</em> to the stream identified
 	 * by <tt>a0</tt>.
 	 * @param a0 the file descriptor to which we should write.
@@ -648,12 +648,12 @@ public class UserProcess {
 		int result = outputFile.write(data, 0, data.length);
 		if (data.length != result) {
 			error("bogus write; "+result+" <> "+data.length);
-		} 
+		}
 		return result;
  	}
- 
+
 	/**
-	 * Reads the number of bytes in <tt>a2</tt> 
+	 * Reads the number of bytes in <tt>a2</tt>
 	 * located at <em>memory(<tt>a1</tt>)</em> from the stream identified
 	 * by <tt>a0</tt>.
 	 * @param a0 the file descriptor from which we should read.
@@ -684,7 +684,7 @@ public class UserProcess {
  	}
 
     /**
-     * Use the file system to open the file indicated by 
+     * Use the file system to open the file indicated by
      * the file name in <tt>a0</tt>.  Does not create a file
      * if the given file name does not exist on the file system.
      *
@@ -713,7 +713,7 @@ public class UserProcess {
 					filePositions[fd] = 0;
 					numOpenFiles++;
 				}
-				else 
+				else
 				{
 					fd = -1;
 				}
@@ -727,8 +727,8 @@ public class UserProcess {
 	}
 
     /**
-     * Use the file system to create the file indicated by 
-     * the file name in <tt>a0</tt>.  If the file exists, 
+     * Use the file system to create the file indicated by
+     * the file name in <tt>a0</tt>.  If the file exists,
      * it is opened.
      *
      * @param	a0	the filename of the file to create.
@@ -758,7 +758,7 @@ public class UserProcess {
 					filePositions[fd] = 0;
 					numOpenFiles++;
 				}
-				else 
+				else
 				{
 					fd = -1;
 				}
@@ -770,7 +770,7 @@ public class UserProcess {
 		}
 		return fd;
 	}
-	
+
 	/**
 	 * Suspend execution of the current process until the child process specified
 	 * by the processID argument has exited. If the child has already exited by the
@@ -887,7 +887,7 @@ public class UserProcess {
 		debug("exec.child.pid="+child.pid);
 		return (executed)? child.pid : error;
 	}
-	
+
 	/**
 	 * Terminate the current process immediately. Any open file descriptors
 	 * belonging to the process are closed. Any children of the process no longer
@@ -910,7 +910,7 @@ public class UserProcess {
 			}
 		}
 		Lib.assertTrue(numOpenFiles == 0, "Something's awry with the files");
-		
+
 		for (UserProcess child : children){
 			child.parentProcess = null;
 		}
@@ -971,11 +971,11 @@ public class UserProcess {
 	    Lib.assertNotReached("Unexpected exception");
 	}
     }
-    
+
     public int getPid() {
     	return pid;
     }
-    
+
     /**
      * Returns true iff the virtual address provided could be reasonable.
      * N.B. this does not check to ensure the UserProcess has access to the
@@ -986,16 +986,16 @@ public class UserProcess {
      */
     private boolean rangeCheckMemoryAccess(int vaddr) {
 		// TODO: better range checking
-    	final int maximumMemory = Processor.pageSize 
+    	final int maximumMemory = Processor.pageSize
 								* Machine.processor().getNumPhysPages();
 		return (vaddr >= 0 || vaddr <= maximumMemory);
 	}
 
     /**
      * Ensures the provided file descriptor is a legitimate one for use by
-     * this UserProcess. This goes one step further 
+     * this UserProcess. This goes one step further
      * than {@link #rangeCheckFileDescriptor(int)} and actually checks to see
-     * if the file descriptor is non-null. 
+     * if the file descriptor is non-null.
      * @param descriptorNumber the descriptor index which should be checked
      * @return true iff the file descriptor at that index may safely be
      * dereferenced.
@@ -1011,7 +1011,7 @@ public class UserProcess {
     }
 
     /**
-     * Returns true iff the provided file descriptor index 
+     * Returns true iff the provided file descriptor index
      * is zero to {@link UserProcess#maxNumFiles} (inclusive). N.B. this method
      * does not guarantee the file descriptor at that index is live (i.e. non-null).
      * For that, {@link #checkForFileDescriptor(int)}.
@@ -1020,10 +1020,10 @@ public class UserProcess {
      * @return true if that could be a valid file descriptor, false otherwise.
      */
     private boolean rangeCheckFileDescriptor(int descriptorNumber) {
-		return (descriptorNumber > 0 || 
+		return (descriptorNumber > 0 ||
 				descriptorNumber < this.fileDescriptors.length);
 	}
-    
+
     private void debugHex(String title, byte[] data) {
     	final int length = 72;
     	final String EOL = System.getProperty("line.separator");
@@ -1079,12 +1079,12 @@ public class UserProcess {
     private void debug(String msg) {
     	Lib.debug(dbgProcess, "DEBUG:"+toString()+":"+msg);
     }
-    
+
     @Override
     public String toString() {
     	return "UserProcess[pid="+pid+"]";
     }
-    
+
     /** The program being run by this process. */
     protected Coff coff;
 
@@ -1098,7 +1098,7 @@ public class UserProcess {
 
     /** The number of pages in the program's stack. */
     protected final int stackPages = 8;
-    
+
     private int initialPC, initialSP;
     private int argc, argv;
     private OpenFile[] fileDescriptors;

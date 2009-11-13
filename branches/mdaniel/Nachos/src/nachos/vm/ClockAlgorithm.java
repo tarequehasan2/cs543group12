@@ -31,9 +31,9 @@ public class ClockAlgorithm implements Algorithm{
 			boolean used = false;
 			for (SwapAwareTranslationEntry swapAwareTranslationEntry : swapAwareTranslationEntries){
 				// If it is used, mark it not used, so that next time we know whether it is used.
-				if (swapAwareTranslationEntry.used == true){
+				if (swapAwareTranslationEntry.isUsed()){
 					used = true;
-					swapAwareTranslationEntry.used = false;
+					swapAwareTranslationEntry.clearUsedMark();
 				}
 			}
 			// If not used, make a possible victim
@@ -47,7 +47,7 @@ public class ClockAlgorithm implements Algorithm{
 				}
 				// In case we don't know the longest unused, we'll pick the last one examined.
 				anyUnused = i;
-			// If used, make it less likely of a victim	
+			// If used, make it less likely of a victim
 			}else {
 				if (victims.containsKey(i)){
 					int value = victims.get(i);
@@ -64,7 +64,7 @@ public class ClockAlgorithm implements Algorithm{
 				longestUnused = victims.get(i);
 				nextVictim = i;
 			}
-			
+
 			// no unused pages??
 			if (nextVictim == -1){
 				//TODO find minimally used?
@@ -73,13 +73,13 @@ public class ClockAlgorithm implements Algorithm{
 				}else{
 					// NO Unused pages??  OK.  I pick this one.
 					nextVictim = Lib.random(Machine.processor().getNumPhysPages());
-				}	
+				}
 			}
 		}
 		coreMapLock.release();
 		return nextVictim;
 	}
-	
 
-	
+
+
 }

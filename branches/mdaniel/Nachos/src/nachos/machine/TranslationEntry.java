@@ -2,8 +2,6 @@
 
 package nachos.machine;
 
-import nachos.machine.*;
-
 /**
  * A single translation between a virtual page and a physical page.
  */
@@ -33,7 +31,7 @@ public final class TranslationEntry {
 	this.readOnly = readOnly;
 	this.used = used;
 	this.dirty = dirty;
-    }       
+    }
 
     /**
      * Allocate a new translation entry, copying the contents of an existing
@@ -52,7 +50,7 @@ public final class TranslationEntry {
 
     /** The virtual page number. */
     public int vpn;
-    
+
     /** The physical page number. */
     public int ppn;
 
@@ -60,22 +58,32 @@ public final class TranslationEntry {
      * If this flag is <tt>false</tt>, this translation entry is ignored.
      */
     public boolean valid;
-    
+
     /**
      * If this flag is <tt>true</tt>, the user pprogram is not allowed to
      * modify the contents of this virtual page.
      */
     public boolean readOnly;
-    
+
     /**
      * This flag is set to <tt>true</tt> every time the page is read or written
      * by a user program.
      */
     public boolean used;
-    
+
     /**
      * This flag is set to <tt>true</tt> every time the page is written by a
      * user program.
      */
     public boolean dirty;
+    @Override
+    public String toString() {
+        return "TranslationEntry { vpn:" +vpn+
+                " ppn:" +ppn+
+                " valid:" +valid+
+                " used:" +used+
+                " dirty:" +dirty+
+                " readOnly:" +readOnly+
+                " }";
+    }
 }
