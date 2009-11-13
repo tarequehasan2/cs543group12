@@ -20,8 +20,8 @@ public class VMProcess extends UserProcess
     @Override
     public void saveState() {
         debug("saveState()");
+/*
         boolean intStatus = Machine.interrupt().disable();
-//        InvertedPageTable.syncAllProcTlb();
         tlbLock.acquire();
         final Processor proc = Machine.processor();
         final int tlbSize = proc.getTLBSize();
@@ -33,6 +33,7 @@ public class VMProcess extends UserProcess
     	}
         tlbLock.release();
         Machine.interrupt().setStatus(intStatus);
+*/
     }
 
     /**
@@ -44,7 +45,6 @@ public class VMProcess extends UserProcess
         debug("restoreState()");
         debug("TLB:restoring");
         boolean intStatus = Machine.interrupt().disable();
-//        InvertedPageTable.syncAllProcTlb();
         tlbLock.acquire();
         final Processor proc = Machine.processor();
         final int tlbSize = proc.getTLBSize();
@@ -120,10 +120,15 @@ public class VMProcess extends UserProcess
         return result;
     }
 
+    /**
+     * Looks up the requested virtual page table entry for the current process.
+     * @param vpn the virtual page whose page table entry we want
+     * @return the page table entry for the provided page, or null if not found.
+     */
     @Override
     protected TranslationEntry getTranslationEntryForVirtualPage(int vpn) {
         TranslationEntry entry;
-        entry = InvertedPageTable.findProcTLBforVpn(vpn);
+        entry = ProcessorUtil.findProcTLBforVpn(vpn);
         if (null != entry && entry.valid) {
         	return entry;
         }
@@ -140,6 +145,12 @@ public class VMProcess extends UserProcess
         return entry;
     }
 
+    /**
+     * Provides physical address translation via our new management of
+     * page table entries instead of per-process page tables.
+     * @param vaddr the complete virtual address to translate.
+     * @return the complete physical address of the provided virtual address.
+     */
     @Override
     protected int convertVaddrToPaddr(int vaddr) {
 		int vPageNumber = Processor.pageFromAddress(vaddr);
@@ -166,6 +177,10 @@ public class VMProcess extends UserProcess
 		return Processor.makeAddress(pPageNumber, pageAddress);
 	}
 
+    /**
+     * Provides access to the COFF that this VMProcess is currently running.
+     * @return the source COFF instance.
+     */
     Coff getCoff() {
         return coff;
     }
@@ -204,18 +219,25 @@ public class VMProcess extends UserProcess
         return "VMProcess[pid="+getPid()+"]";
     }
 
-
+    /**
+     * Provides helper logic for dealing with a TLB miss.
+     * Be advised that if we are not able to reconcile your TLB miss, we will
+     * terminate your process with exit(1).
+     * @param vaddr the virtual address of the memory access which caused the
+     * TLB miss.
+     */
     protected void handleTLBMiss(int vaddr) {
-        boolean intStatus = Machine.interrupt().disable();
+//        boolean intStatus = Machine.interrupt().disable();
         int page = Processor.pageFromAddress(vaddr);
         debug("vaddr("+Integer.toHexString(vaddr)+"):=pid="+getPid()+";vpn="+page);
         if (!InvertedPageTable.handleTLBMiss(this, page)) {
             error("Unable to handle TLB miss; exit(1)");
-            Machine.interrupt().setStatus(intStatus);
-            this.handleSyscall(1, 1, 0, 0, 0);
-            return;
+//            Machine.interrupt().setStatus(intStatus);
+            final int exitCode = 1;
+            handleSyscall(syscallExit, exitCode, 0, 0, 0);
+//            return;
         }
-        Machine.interrupt().setStatus(intStatus);
+//        Machine.interrupt().setStatus(intStatus);
     }
 
     private void error(String message) {
@@ -226,8 +248,12 @@ public class VMProcess extends UserProcess
         Lib.debug(dbgFlag,"DEBUG:"+toString()+":"+message);
     }
 
-    //    private static final int pageSize = Processor.pageSize;
     private static final char dbgFlag = 'P';
     private static final Lock tlbLock = new Lock();
+    /**
+     * Provides just a VMProcess-scoped lock on page reads and writes,
+     * to prevent the pages from being swapped out from underneath us.
+     * If you want to lock the whole memory, see {@link VMKernel#lockMemory()}.
+     */
     private static final Lock memoryLock = new Lock();
 }
