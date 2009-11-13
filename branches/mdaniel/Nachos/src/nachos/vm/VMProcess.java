@@ -132,7 +132,7 @@ public class VMProcess extends UserProcess
         	return entry;
         }
         final int pid = getPid();
-        entry = InvertedPageTable.findIPTEntryForVirtualPage(pid, vpn);
+        entry = InvertedPageTable.findIPTEntryForVpn(pid, vpn);
         if (null == entry) {
             error("Unmapped page table entry for VPN: "+vpn);
             return null; // kaboom!
@@ -158,7 +158,7 @@ public class VMProcess extends UserProcess
 		int pPageNumber = translationEntry.ppn;
 
         if (0 > pPageNumber || pPageNumber >= Machine.processor().getNumPhysPages()) {
-            error("physical page out of bounds: "+pPageNumber);
+            Lib.assertTrue(false, "physical page out of bounds: "+pPageNumber);
             return -1;
         }
 

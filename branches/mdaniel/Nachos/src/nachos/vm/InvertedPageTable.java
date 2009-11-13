@@ -46,12 +46,8 @@ public class InvertedPageTable
     	Lib.assertTrue(_lock.isHeldByCurrentThread());
         debug("ENTER:loadEntry("+process+","+page+")");
 		final int pid = process.getPid();
-		SwapAwareTranslationEntry entry = findMainEntryForVpn(pid, page);
-        if (null == entry) {
-            debug("Missing core entry for ("+pid+","+page+"); consulting swap");
-            // then maybe it's in swap
-            entry = findSwapEntryForVpn(pid, page);
-        }
+
+		SwapAwareTranslationEntry entry = findEntryForVpn(pid, page);
 
         if (null == entry) {
         	error("("+pid+","+page+") requested a BOGUS frame");
@@ -69,8 +65,8 @@ public class InvertedPageTable
             int ppn = mallocOrSwap(pid);
             SwapFile.rollIn(entry.getSwapPageNumber(), ppn);
             moveEntryFromSwapToMainTable(pid, entry);
-            addToCoreMap(ppn, entry);
             entry.restoredToMemory(ppn);
+            addToCoreMap(ppn, entry);
             debug("Rolled pid="+pid+"'s back in from: "+entry);
             return true;
         }
@@ -78,8 +74,8 @@ public class InvertedPageTable
             debug("allocing pid="+pid+"'s stack page "+entry);
             int ppn = mallocOrSwap(pid);
             initializePage(ppn);
-            addToCoreMap(ppn, entry);
             entry.restoredToMemory(ppn);
+            addToCoreMap(ppn, entry);
             debug("Alloced pid="+pid+"'s stack page "+entry);
             return true;
         }
@@ -90,8 +86,8 @@ public class InvertedPageTable
             final CoffSection section = process.getCoff()
                     .getSection(entry.getCoffSection());
             section.loadPage(entry.getCoffPage(), ppn);
-            addToCoreMap(ppn, entry);
             entry.restoredToMemory(ppn);
+            addToCoreMap(ppn, entry);
             debug("Rolled pid="+pid+"'s coffSection in from: "+entry);
             return true;
         }
@@ -193,6 +189,7 @@ public class InvertedPageTable
     protected static void addToCoreMap(int ppn, SwapAwareTranslationEntry entry) {
     	Lib.assertTrue(_lock.isHeldByCurrentThread());
         debug("ENTER:addToCoreMap("+ppn+","+entry+")");
+        Lib.assertTrue(entry.isValid(), "Cannot insert invalid SATE into CORE");
         List<SwapAwareTranslationEntry> pages;
         if (! CORE_MAP.containsKey(ppn)) {
             pages = new ArrayList<SwapAwareTranslationEntry>();
@@ -425,21 +422,26 @@ public class InvertedPageTable
             debug("Used page ("+pid+","+vpn+") isn't in the TLB");
         }
 
-        /// shouldn't have to check Swap here becaus we are being invoked from
-        /// a live virtual page access
-        SwapAwareTranslationEntry entry = findMainEntryForVpn(pid, vpn);
+        /// have to check Swap here because we are also invoked from
+        /// readVirtualMemory and writeVirtualMemory, which don't go through
+        /// the Processor's TLB
+        SwapAwareTranslationEntry entry = findEntryForVpn(pid, vpn);
         if (null == entry) {
-            error("no entry for ("+pid+","+vpn+"):\r\n"+TABLE.get(pid));
+            Lib.assertTrue(false, "no entry for ("+pid+","+vpn+"):\r\n"+TABLE.get(pid));
         	_lock.release();
             return;
         }
         if (!entry.isValid()) {
             if (!loadEntry(process, vpn)) {
-                error("unable to load \"used\" entry for ("+pid+","+vpn+"):\r\n"
+                Lib.assertTrue(false,
+                    "unable to load \"used\" entry for ("+pid+","+vpn+"):\r\n"
                                 +TABLE.get(pid));
             }
         }
         entry.markAsUsed();
+        if (!tlbLoaded) {
+            overwriteRandomTLB(entry);
+        }
         _lock.release();
     }
 
@@ -447,6 +449,8 @@ public class InvertedPageTable
         debug("ENTER:setVirtualWritten("+process+","+vpn+")");
         final int pid = process.getPid();
         // ensure you do this outside the lock
+        // also, this will result in the page being brought into memory
+        // plus being stored in the TLB; so no need for checking that here
         setVirtualUsed(process, vpn);
         _lock.acquire();
 
@@ -462,11 +466,10 @@ public class InvertedPageTable
 			}
 		}
 
-        /// shouldn't have to check Swap here becaus we are being invoked from
-        /// a live virtual page access
-        SwapAwareTranslationEntry entry = findMainEntryForVpn(pid, vpn);
+        SwapAwareTranslationEntry entry = findEntryForVpn(pid, vpn);
         if (null == entry) {
-            error("no entry for ("+pid+","+vpn+"):\r\n"+TABLE.get(pid));
+            Lib.assertTrue(false,
+                    "no entry for ("+pid+","+vpn+"):\r\n"+TABLE.get(pid));
         	_lock.release();
             return;
         }
@@ -483,17 +486,37 @@ public class InvertedPageTable
         _lock.release();
     }
 
-    protected static TranslationEntry findIPTEntryForVirtualPage(int pid, int vpn) {
-        SwapAwareTranslationEntry entry = findMainEntryForVpn(pid, vpn);
-        if (null == entry) {
-            // okay, maybe we moved it to swap
-            entry = findSwapEntryForVpn(pid, vpn);
-        }
+    /**
+     * Consults only my own tables to find the vpn belonging to that pid.
+     * If you want to ask the Processor,
+     * use {@link InvertedPageTable#findProcTLBforVpn(int)} instead.
+     * @param pid the process id whose page you seek.
+     * @param vpn the virtual page number you are looking for.
+     * @return the entry if it exists, null otherwise.
+     */
+    protected static TranslationEntry findIPTEntryForVpn(int pid, int vpn) {
+        SwapAwareTranslationEntry entry = findEntryForVpn(pid, vpn);
         if (null == entry) {
             error("no entry for ("+pid+","+vpn+"):\r\n"+TABLE.get(pid));
             return null;
         }
         return entry.toTranslationEntry();
+    }
+
+    /**
+     * Consults the IPT table first, then checks to see if the provided vpn
+     * lives in the SWAP table.
+     * @param pid the process id whose table we should consult.
+     * @param vpn the virtual page number you seek.
+     * @return the entry if found in either table, or null if not.
+     */
+    protected static SwapAwareTranslationEntry findEntryForVpn(int pid, int vpn) {
+        SwapAwareTranslationEntry result;
+        result = findMainEntryForVpn(pid, vpn);
+        if (null == result) {
+            result = findSwapEntryForVpn(pid, vpn);
+        }
+        return result;
     }
 
     public static int[] findAllSwapPagesByPid(int pid) {
