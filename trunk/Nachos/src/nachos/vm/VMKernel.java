@@ -24,11 +24,12 @@ public class VMKernel extends UserKernel {
 
     /**
      * Test this kernel.
-     */	
+     */
     public void selfTest() {
         debug("selfTest()");
     	super.selfTest();
-        SwapFileTest.selfTest();
+//        SwapFileTest.selfTest();
+//        Lib.assertTrue(false, "self test");
     }
 
     /**
@@ -38,7 +39,7 @@ public class VMKernel extends UserKernel {
         debug("run()");
     	super.run();
     }
-    
+
     /**
      * Terminate this kernel. Never returns.
      */
@@ -48,31 +49,15 @@ public class VMKernel extends UserKernel {
         debug("closed SwapFile");
     	super.terminate();
     }
-    
-    public int[] malloc(int numPages) {
-    	int[] result = new int[numPages];
-    	for (int i = 0; i < numPages; i++ ){
-    		int ppn = InvertedPageTable.mallocOrSwap();
-    		if (ppn == -1){
-    			return null;
-    		}else{
-    			result[i] = ppn;
-    		}
-    	}
-    	return result;
-    }
 
-    private void error(String message) {
-        System.err.println("ERROR:VMKernel:"+message);
-    }
+//    private void error(String message) {
+//        Lib.error("ERROR:VMKernel:"+message);
+//    }
 
-    
+
     private void debug(String message) {
-        Lib.debug(dbgVM, "DEBUG:VMKernel:"+message);
+        Lib.debug(dbgFlag, "DEBUG:VMKernel:"+message);
     }
-    
-    // dummy variables to make javac smarter
-    private static VMProcess dummy1;
 
-    private static final char dbgVM = 'v';
+    private static final char dbgFlag = 'K';
 }
