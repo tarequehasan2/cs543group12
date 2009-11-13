@@ -1,43 +1,35 @@
 package nachos.vm;
 
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.Map;
 import java.util.Set;
 
 import nachos.machine.FileSystem;
-import nachos.machine.Machine;
 import nachos.machine.OpenFile;
 import nachos.machine.Processor;
 import nachos.threads.Lock;
 
 public class SwapFile {
+    protected static IMachine machine = LiveMachine.getInstance();
 	private static final String SWAP_FILE_NAME = "swap";
     /**
-     * Contains the frame size in the swap file. This will always be 
+     * Contains the frame size in the swap file. This will always be
      * greater than or equal to {@link Processor#pageSize}.
      */
-    private static final int SWAP_FRAME_SIZE = Processor.pageSize;
+    private static final int SWAP_FRAME_SIZE = machine.getPageSize();
     private static final FileSystem fileSystem;
 	private static final OpenFile swap;
-    /** Contains the file offset for each page, mapped by swap page number. */
-	private static final Map<Integer, Integer> positions;
-	private static final Lock lock;
-    /** Contains a list of integers which,
-     * when multiplied by {@link Processor#pageSize},
-     * will yield the available offsets in the pagefile.
-     */
 	private static final Set<Integer> freePages;
+	private static final Lock swapFileLock;
+    private static final Lock freePagesLock;
 
 	static {
-        fileSystem = Machine.stubFileSystem();
+        fileSystem = nachos.machine.Machine.stubFileSystem();
         swap = fileSystem.open(SWAP_FILE_NAME, true);
-		positions = new HashMap<Integer, Integer>();
-		lock = new Lock();
-		freePages = new HashSet<Integer>();
         // don't add any, because the swap is initially zero sized
         // and thus no free pages; don't worry, we'll add some
+		freePages = new HashSet<Integer>();
+		swapFileLock = new Lock();
+        freePagesLock = new Lock();
 	}
 
     /**
@@ -51,16 +43,16 @@ public class SwapFile {
      * @return true if ok, false otherwise.
      */
 	public static boolean rollIn(int spn, int ppn) {
-		lock.acquire();
+		swapFileLock.acquire();
 
-        if (! positions.containsKey(spn)) {
-            error("Unable to find persisted page "+spn);
-            lock.release();
+        if (swap.length() < (spn * SWAP_FRAME_SIZE)) {
+            error("Unable to find persisted page "+spn+"; file couldn't possibly contain it");
+            swapFileLock.release();
             return false;
         }
-        final int pos = positions.get(spn);
-        final byte[] memory = Machine.processor().getMemory();
-        final int memoryOffset = ppn * Processor.pageSize;
+        final int pos = spn * SWAP_FRAME_SIZE;
+        final byte[] memory = machine.getMemory();
+        final int memoryOffset = ppn * machine.getPageSize();
         /// WARNING: if you encoded metadata, ensure you bump the pos
         /// before calling this or you'll smash your metadata in the swap
         final int bytesRead =
@@ -68,15 +60,11 @@ public class SwapFile {
         if (bytesRead != SWAP_FRAME_SIZE) {
             error("Incorrect read size; expected "
                     +SWAP_FRAME_SIZE+" but read "+bytesRead);
-            lock.release();
+            swapFileLock.release();
             return false;
         }
 
-        // now free up that slot for someone else, since the process shouldn't
-        // be asking for the same frame twice
-        freePages.add(spn);
-
-		lock.release();
+        swapFileLock.release();
 		return true;
 	}
 
@@ -89,28 +77,34 @@ public class SwapFile {
      * @return the swap page number, or -1 on error.
      */
 	public static int rollOut(int ppn) {
-		lock.acquire();
+        freePagesLock.acquire();
         if (freePages.isEmpty()) {
-            // it's like printing money, eh?
-            int inUse = swap.length() / SWAP_FRAME_SIZE;
-            freePages.add(inUse + 1);
+            // if the swap file is 0 length, then zero frame is available
+            // if it's 4096 long, then 1*4096 will write to the end of the file
+            int nextPage = swap.length() / SWAP_FRAME_SIZE;
+            freePages.add(nextPage);
         }
         int nextSlot = freePages.iterator().next();
         freePages.remove(nextSlot);
+        freePagesLock.release();
+
         final int pos = nextSlot * SWAP_FRAME_SIZE;
-        final byte[] memory = Machine.processor().getMemory();
-        final int memoryOffset = ppn * Processor.pageSize;
+        final byte[] memory = machine.getMemory();
+        final int memoryOffset = ppn * machine.getPageSize();
+
+        swapFileLock.acquire();
         /// WARNING: if you encode metadata, ensure you bump the pos
         /// before calling this or you'll write metadata into main memory
         final int written = swap.write(pos, memory, memoryOffset, SWAP_FRAME_SIZE);
         if (written != SWAP_FRAME_SIZE) {
             error("Incorrect write size; expected "
                     +SWAP_FRAME_SIZE+" but wrote "+written);
-		    lock.release();
+		    swapFileLock.release();
+            // return that slot to the free pool, since we didn't really use it
+            free(new int[] { nextSlot });
 			return -1;
 		}
-        positions.put(nextSlot, pos);
-        lock.release();
+        swapFileLock.release();
 		return nextSlot;
 	}
 
@@ -122,23 +116,23 @@ public class SwapFile {
         if (null == pages || 0 == pages.length) {
             return;
         }
-        lock.acquire();
+        freePagesLock.acquire();
         for (int page : pages) {
             freePages.add(page);
         }
-        lock.release();
+        freePagesLock.release();
     }
     /**
      * Closes and deletes the SwapFile.
      */
 	public static void close(){
-		lock.acquire();
+		swapFileLock.acquire();
         swap.close();
         boolean ok = fileSystem.remove(SWAP_FILE_NAME);
         if (!ok) {
             error("Unable to remove \"" + SWAP_FILE_NAME + "\"");
         }
-        lock.release();
+        swapFileLock.release();
 	}
 
     static void error(String msg) {
