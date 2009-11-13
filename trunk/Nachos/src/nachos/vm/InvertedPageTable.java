@@ -739,7 +739,7 @@ public class InvertedPageTable
     private static Map<Integer, Map<Integer, SwapAwareTranslationEntry>>
         SWAP_TABLE = new HashMap<Integer, Map<Integer, SwapAwareTranslationEntry>>();
     private static Lock _lock = new Lock();
-    private static Algorithm algorithm = new RandomAlgorithm();
-//    private static Algorithm algorithm = new ClockAlgorithm();
+//    private static Algorithm algorithm = new RandomAlgorithm();
+    private static Algorithm algorithm = new ClockAlgorithm();
     private static final char dbgFlag = 'I';
 }
