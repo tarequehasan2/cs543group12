@@ -20,7 +20,6 @@ public class SwapFile {
 	private static final OpenFile swap;
 	private static final Set<Integer> freePages;
 	private static final Lock swapFileLock;
-    private static final Lock freePagesLock;
 
 	static {
         fileSystem = nachos.machine.Machine.stubFileSystem();
@@ -29,7 +28,6 @@ public class SwapFile {
         // and thus no free pages; don't worry, we'll add some
 		freePages = new HashSet<Integer>();
 		swapFileLock = new Lock();
-        freePagesLock = new Lock();
 	}
 
     /**
@@ -77,7 +75,7 @@ public class SwapFile {
      * @return the swap page number, or -1 on error.
      */
 	public static int rollOut(int ppn) {
-        freePagesLock.acquire();
+        swapFileLock.acquire();
         if (freePages.isEmpty()) {
             // if the swap file is 0 length, then zero frame is available
             // if it's 4096 long, then 1*4096 will write to the end of the file
@@ -86,13 +84,11 @@ public class SwapFile {
         }
         int nextSlot = freePages.iterator().next();
         freePages.remove(nextSlot);
-        freePagesLock.release();
 
         final int pos = nextSlot * SWAP_FRAME_SIZE;
         final byte[] memory = machine.getMemory();
         final int memoryOffset = ppn * machine.getPageSize();
 
-        swapFileLock.acquire();
         /// WARNING: if you encode metadata, ensure you bump the pos
         /// before calling this or you'll write metadata into main memory
         final int written = swap.write(pos, memory, memoryOffset, SWAP_FRAME_SIZE);
@@ -116,11 +112,11 @@ public class SwapFile {
         if (null == pages || 0 == pages.length) {
             return;
         }
-        freePagesLock.acquire();
+        swapFileLock.acquire();
         for (int page : pages) {
             freePages.add(page);
         }
-        freePagesLock.release();
+        swapFileLock.release();
     }
     /**
      * Closes and deletes the SwapFile.

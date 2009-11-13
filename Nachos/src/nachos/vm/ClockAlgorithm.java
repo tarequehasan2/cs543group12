@@ -1,39 +1,32 @@
 package nachos.vm;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import nachos.machine.Lib;
 import nachos.machine.Machine;
-import nachos.threads.Lock;
 
 public class ClockAlgorithm implements Algorithm{
 
 	private final Map<Integer,Integer> victims = new HashMap<Integer, Integer>();
-	private final Map<Integer, List<SwapAwareTranslationEntry>> coreMap;
-	private final Lock coreMapLock;
-
-	ClockAlgorithm(Map<Integer, List<SwapAwareTranslationEntry>> coreMap, Lock coreMapLock ){
-		this.coreMap = coreMap;
-		this.coreMapLock = coreMapLock;
-	}
 
 	@Override
 	public int findVictim() {
 		int longestUnused = 0;
 		int nextVictim = -1;
 		int anyUnused = -1;
-		coreMapLock.acquire();
-		// look through all physical pages (clock starting at 0)
-		for (int i=0; i <  Machine.processor().getNumPhysPages(); i++){
-			List<SwapAwareTranslationEntry> swapAwareTranslationEntries = coreMap.get(i);
+        final int numPhysPages = Machine.processor().getNumPhysPages();
+        // look through all physical pages (clock starting at 0)
+        for (int i=0; i < numPhysPages; i++){
 			boolean used = false;
-			for (SwapAwareTranslationEntry swapAwareTranslationEntry : swapAwareTranslationEntries){
+			for (CoreMap.CoreMapEntry coreEntry : CoreMap.findEntriesForPpn(i)){
+                SwapAwareTranslationEntry entry
+                        = InvertedPageTable.findEntryForVpn(
+                            coreEntry.getPid(), coreEntry.getVpn());
 				// If it is used, mark it not used, so that next time we know whether it is used.
-				if (swapAwareTranslationEntry.isUsed()){
+				if (entry.isUsed()){
 					used = true;
-					swapAwareTranslationEntry.clearUsedMark();
+					entry.clearUsedMark();
 				}
 			}
 			// If not used, make a possible victim
@@ -60,7 +53,7 @@ public class ClockAlgorithm implements Algorithm{
 				}
 			}
 			// Since we are iterating anyway, get the longest unused victim
-			if (longestUnused < victims.get(i)){
+			if (victims.containsKey(i) && longestUnused < victims.get(i)){
 				longestUnused = victims.get(i);
 				nextVictim = i;
 			}
@@ -72,11 +65,10 @@ public class ClockAlgorithm implements Algorithm{
 					nextVictim = anyUnused;
 				}else{
 					// NO Unused pages??  OK.  I pick this one.
-					nextVictim = Lib.random(Machine.processor().getNumPhysPages());
+					nextVictim = Lib.random(numPhysPages);
 				}
 			}
 		}
-		coreMapLock.release();
 		return nextVictim;
 	}
 

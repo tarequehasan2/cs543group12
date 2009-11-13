@@ -50,12 +50,11 @@ public class VMKernel extends UserKernel {
     	super.terminate();
     }
 
-//    private void error(String message) {
+//    private static void error(String message) {
 //        Lib.error("ERROR:VMKernel:"+message);
 //    }
 
-
-    private void debug(String message) {
+    private static void debug(String message) {
         Lib.debug(dbgFlag, "DEBUG:VMKernel:"+message);
     }
 
