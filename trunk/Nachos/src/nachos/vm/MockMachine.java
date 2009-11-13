@@ -24,6 +24,11 @@ public class MockMachine implements IMachine
     }
 
     @Override
+    public int getNumPhysPages() {
+        return PhysicalPages;
+    }
+
+    @Override
     public int getTlbSize() {
         return TlbSize;
     }

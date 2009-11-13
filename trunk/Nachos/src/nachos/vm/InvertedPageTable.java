@@ -18,10 +18,6 @@ public class InvertedPageTable
     public static boolean handleTLBMiss(VMProcess process, int page) {
         _lock.acquire();
         debug("ENTER:handleTLBMiss("+process+","+page+")");
-
-        // sync from Processor's TLB statuses before we blow it away
-        syncAllProcTlb();
-
         boolean result = loadEntry(process, page);
         if (! result) {
             error("LoadEntry("+process+","+page+") failed");
@@ -32,11 +28,15 @@ public class InvertedPageTable
         /// we only need to check CoreEntry because that was loadEntry's JOB
         /// it should not have put it into swap
         final SwapAwareTranslationEntry entry = findMainEntryForVpn(pid, page);
+        Lib.assertTrue(null != entry,
+                    "loadEntry OK but no getEntryFor ("+pid+","+page+")"
+                            +"\r\nIPT:="+TABLE.get(pid)
+                            +"\r\nSWAP:="+SWAP_TABLE.get(pid));
         if (null == entry) {
-            error("loadEntry OK but no getEntryFor ("+pid+","+page+")");
             _lock.release();
             return false;
         }
+        // we have already synced up the processor TLB in VMProcess#handleException
         overwriteRandomTLB(entry);
         _lock.release();
         return result;
@@ -62,32 +62,41 @@ public class InvertedPageTable
         /// WARNING: the order matters here!
         if (entry.isInSwap()) {
             debug("Rolling pid="+pid+"'s back in from: "+entry);
-            int ppn = mallocOrSwap(pid);
+            Lib.assertTrue(SWAP_TABLE.containsKey(pid),
+                    "Swap doesn't know about your PID("+pid+"):="
+                            +TABLE.get(pid)+"\r\n\r\n"
+                            +SWAP_TABLE+"\r\n"+entry);
+            Lib.assertTrue(SWAP_TABLE.get(pid).containsKey(entry.getVpn()),
+                    "How did you get an entry in swap pid="+pid+"::"+entry
+                    +"when SWAP:=\r\n"+SWAP_TABLE);
+            int ppn = mallocOrSwap();
             SwapFile.rollIn(entry.getSwapPageNumber(), ppn);
-            moveEntryFromSwapToMainTable(pid, entry);
+            CoreMap.addToCoreMap(ppn, pid, entry.getVpn());
             entry.restoredToMemory(ppn);
-            addToCoreMap(ppn, entry);
+            // FIXME: we are just dispensing with the "it's in swap until it's overwritten" idea
+            entry.removedFromSwapfile();
+            moveEntryFromSwapToMainTable(pid, entry);
             debug("Rolled pid="+pid+"'s back in from: "+entry);
             return true;
         }
         if (entry.isStack()) {
             debug("allocing pid="+pid+"'s stack page "+entry);
-            int ppn = mallocOrSwap(pid);
+            int ppn = mallocOrSwap();
             initializePage(ppn);
             entry.restoredToMemory(ppn);
-            addToCoreMap(ppn, entry);
+            CoreMap.addToCoreMap(ppn, pid, entry.getVpn());
             debug("Alloced pid="+pid+"'s stack page "+entry);
             return true;
         }
         if (entry.isCoff()) {
             debug("Rolling pid="+pid+"'s coffSection in from: "+entry);
-            int ppn = mallocOrSwap(pid);
+            int ppn = mallocOrSwap();
             // this will Lib.assert() if the coffSection is out of bounds
             final CoffSection section = process.getCoff()
                     .getSection(entry.getCoffSection());
             section.loadPage(entry.getCoffPage(), ppn);
             entry.restoredToMemory(ppn);
-            addToCoreMap(ppn, entry);
+            CoreMap.addToCoreMap(ppn, pid, entry.getVpn());
             debug("Rolled pid="+pid+"'s coffSection in from: "+entry);
             return true;
         }
@@ -95,75 +104,136 @@ public class InvertedPageTable
         return false;
     }
 
+    private static int mallocOrSwap() {
+        int ppn = CoreMap.malloc();
+        if (-1 == ppn) {
+            debug("no free pages, someone has to go");
+            ppn = swap();
+            debug("and our lucky winner is "+ppn);
+        }
+        return ppn;
+    }
+
+    /**
+     * Indicates that you wish the system to victimize an in-use page.
+     * It will do so, and return that page to you. That page should
+     * never be -1 since we will always target someone from 0 to maxPages-1.
+     * <b>ENSURE</b> you tidy up any bookkeeping about who's using that ppn.
+     * @return the page which was moved to swap.
+     */
+    public static int swap() {
+        int result = chooseVictimPage();
+        debug("swap victim page := "+result);
+        if (doesNeedRollOut(result)) {
+            debug("rolling-out PPN "+result);
+            Lib.assertTrue(CoreMap.containsPpn(result),
+                    "You're persisting ("+result+") non-Core memory?!");
+            // move the existing memory out of the way
+            int spn = SwapFile.rollOut(result);
+            // invalidate the cached entries who lived in that SPN
+            ejectSwapTableEntriesForSpn(spn);
+            // notify everyone who used that page that they are now in swap
+            movePpnEntriesToSwap(result, spn);
+        } else {
+            // just eject them
+            debug("ejecting PPN "+result+" because is not dirty");
+            ejectEntriesForPpn(result);
+        }
+        CoreMap.free(result);
+        debug("malloc based on roll-out := "+result);
+        return result;
+    }
+
+    private static void movePpnEntriesToSwap(int ppn, int spn) {
+        Lib.assertTrue(_lock.isHeldByCurrentThread());
+        for (Integer pid : TABLE.keySet()) {
+            for (SwapAwareTranslationEntry entry : TABLE.get(pid).values().toArray(new SwapAwareTranslationEntry[0])) {
+                if (entry.getPpn() == ppn) {
+                    entry.movedToSwap(spn);
+                    moveEntryFromMainToSwapTable(pid, entry);
+                }
+            }
+        }
+    }
+
     private static void moveEntryFromSwapToMainTable(
             int pid, SwapAwareTranslationEntry entry) {
         debug("ENTER:moveEntryFromSwapToMain("+pid+","+entry+")");
-        Lib.assertTrue(null != entry, "You can't move NULL Entry to the Main table");
+        Lib.assertTrue(null != entry,
+                "You can't move NULL Entry to the Main table");
+        Lib.assertTrue(entry.isValid(),
+                "I would expect a valid frame before marking it as live: "+entry);
         final Map<Integer, SwapAwareTranslationEntry> entryMap
                 = SWAP_TABLE.get(pid);
         Lib.assertTrue(null != entryMap,
                 "No such Entry in SWAP for pid "+pid
                         +"\r\nEntry:"+entry
                         +"\r\n"+SWAP_TABLE);
-        SwapAwareTranslationEntry entry2 = entryMap.get(entry.getVpn());
-        Lib.assertTrue(null != entry2,
+        Lib.assertTrue(entryMap.containsKey(entry.getVpn()),
                 "Unable to find Swap Entry pid("+pid+")\r\n"
                 +"Entry: "+entry
                 +"\r\n"+SWAP_TABLE);
-        addToMainTable(pid, entry2);
         entryMap.remove(entry.getVpn());
+        entry.removedFromSwapfile();
+        addToMainTable(pid, entry);
     }
 
     private static void moveEntryFromMainToSwapTable(
             int pid, SwapAwareTranslationEntry entry) {
         debug("ENTER:moveEntryFromMainToSwap("+pid+","+entry+")");
-        Lib.assertTrue(null != entry, "You can't move NULL Entry to the Swap table");
+        Lib.assertTrue(null != entry,
+                "You can't move NULL Entry to the Swap table");
+        Lib.assertTrue(entry.isInSwap(),
+                "Moving a non-swap entry, are we?");
+        Lib.assertTrue(! entry.isValid(),
+                "Moving a valid entry, are we?");
         final Map<Integer, SwapAwareTranslationEntry> entryMap = TABLE.get(pid);
         Lib.assertTrue(null != entryMap,
                 "No such Entry in Main Table for pid "+pid+"\r\n"+TABLE);
-        SwapAwareTranslationEntry entry2 = entryMap.get(entry.getVpn());
-        addToSwapTable(pid, entry2);
+        // increase atomicy; remove it (so it doesn't exist in either)
+        // before adding it in case we get context-swapped
         entryMap.remove(entry.getVpn());
+        entry.ejectedFromMemory();
+        addToSwapTable(pid, entry);
     }
 
+    ////
+    //// FREE
+    ////
     public static void free(int pid) {
         debug("ENTER:free("+pid+")");
+        _lock.acquire();
+        freeByPid(pid);
         freeFromMain(pid);
         freeFromSwap(pid);
+        _lock.release();
+    }
+
+    private static void freeByPid(int pid) {
+        Lib.assertTrue(_lock.isHeldByCurrentThread());
+        for (SwapAwareTranslationEntry sate : TABLE.get(pid).values()) {
+            CoreMap.free(sate.getPpn());
+        }
     }
 
     protected static void freeFromMain(int pid) {
+        Lib.assertTrue(_lock.isHeldByCurrentThread());
         freeFromTable(TABLE, pid);
     }
 
     protected static void freeFromSwap(int pid) {
+        Lib.assertTrue(_lock.isHeldByCurrentThread());
         freeFromTable(SWAP_TABLE, pid);
     }
 
     private static void freeFromTable(
             Map<Integer, Map<Integer, SwapAwareTranslationEntry>> theTable, int pid) {
-    	_lock.acquire();
+    	Lib.assertTrue(_lock.isHeldByCurrentThread());
         if (!theTable.containsKey(pid)) {
-        	_lock.release();
             return;
-        }
-        final Map<Integer, SwapAwareTranslationEntry> pages = theTable.get(pid);
-        for (SwapAwareTranslationEntry entry : pages.values()) {
-            final int ppn = entry.getPpn();
-            if (entry.isValid() && -1 != ppn) {
-                clearCoreMapEntry(ppn);
-            }
-            entry.ejectedFromMemory();
         }
         theTable.get(pid).clear();
         theTable.remove(pid);
-    	_lock.release();
-    }
-
-    private static void clearCoreMapEntry(int ppn) {
-        if (CORE_MAP.containsKey(ppn)) {
-            CORE_MAP.get(ppn).clear();
-        }
     }
 
     private static void overwriteRandomTLB(SwapAwareTranslationEntry entry) {
@@ -206,20 +276,6 @@ public class InvertedPageTable
         }
     }
 
-    protected static void addToCoreMap(int ppn, SwapAwareTranslationEntry entry) {
-    	Lib.assertTrue(_lock.isHeldByCurrentThread());
-        debug("ENTER:addToCoreMap("+ppn+","+entry+")");
-        Lib.assertTrue(entry.isValid(), "Cannot insert invalid SATE into CORE");
-        List<SwapAwareTranslationEntry> pages;
-        if (! CORE_MAP.containsKey(ppn)) {
-            pages = new ArrayList<SwapAwareTranslationEntry>();
-            CORE_MAP.put(ppn, pages);
-        } else {
-            pages = CORE_MAP.get(ppn);
-        }
-        pages.add(entry);
-    }
-
     protected static void addToMainTable(int forPid, SwapAwareTranslationEntry entry) {
         debug("ENTER:addToMainTable("+forPid+","+entry+")");
         Lib.assertTrue(null != entry, "You can't add a NULL Entry to the Main table");
@@ -228,7 +284,14 @@ public class InvertedPageTable
 
     protected static void addToSwapTable(int forPid, SwapAwareTranslationEntry entry) {
         debug("ENTER:addToSwapTable("+forPid+","+entry+")");
-        Lib.assertTrue(null != entry, "You can't add a NULL Entry to the Swap table");
+        Lib.assertTrue(null != entry,
+                "You can't add a NULL Entry to the Swap table");
+        Lib.assertTrue(! entry.isValid(),
+            "Why is your entry still valid?");
+        Lib.assertTrue(entry.isInSwap(),
+            "Why are you adding a non-swap entry to the Swap Table?");
+        Lib.assertTrue(-1 != entry.getSwapPageNumber(),
+            "Why does your entry not have a swap page number?");
         addToTable(SWAP_TABLE, forPid, entry);
     }
 
@@ -245,63 +308,54 @@ public class InvertedPageTable
         map.put(entry.getVpn(), entry);
     }
 
-    // TODO: move this into VMKernel and provide support methods here
-    protected static int mallocOrSwap(int forPid) {
-    	Lib.assertTrue(_lock.isHeldByCurrentThread());
-        debug("ENTER:mallocOrSwap("+forPid+")");
-        int result;
-        final int numPhysPages = nachos.machine.Machine.processor().getNumPhysPages();
-        for (int i = 0; i < numPhysPages; i++) {
-        	if (! CORE_MAP.containsKey(i)) {
-                // this shouldn't happen, but is harmless if it does
-                invalidateTlbForPpn(i);
-                debug("malloc based on coremap:= "+i);
-        		return i;
-        	}
-        }
-        int victimPPN = chooseVictimPage();
-        debug("malloc victim page := "+victimPPN);
-        if (doesNeedRollOut(victimPPN)) {
-            debug("rolling-out PPN "+victimPPN);
-            int spn = SwapFile.rollOut(victimPPN);
-            // notify everyone else that we just blew away that SPN's values
-            invalidateSwapCacheForSpn(spn);
-            if (CORE_MAP.containsKey(victimPPN)) {
-                for (SwapAwareTranslationEntry entry : CORE_MAP.get(victimPPN)) {
-                    entry.movedToSwap(spn);
-                    debug("VictimPPN("+victimPPN+") held "+entry+", which we swapped out");
-                    moveEntryFromMainToSwapTable(forPid, entry);
-                }
-                clearCoreMapEntry(victimPPN);
-            }
-        } else {
-            // just eject them
-            debug("ejecting PPN "+victimPPN+" because is not dirty");
-            if (CORE_MAP.containsKey(victimPPN)) {
-                for (SwapAwareTranslationEntry entry : CORE_MAP.get(victimPPN)) {
+    /**
+     * Notifies all the SATE living at the given ppn that they have been
+     * ejected from memory.
+     * @param ppn the physical page which has been cleared.
+     */
+    private static void ejectEntriesForPpn(int ppn) {
+        for (Integer pid : TABLE.keySet()) {
+            for (SwapAwareTranslationEntry entry : TABLE.get(pid).values()) {
+                if (entry.getPpn() == ppn) {
                     entry.ejectedFromMemory();
-                    debug("VictimPPN("+victimPPN+") held "+entry+", which we ejected");
                 }
-                clearCoreMapEntry(victimPPN);
             }
-
         }
-        invalidateTlbForPpn(victimPPN);
-        result = victimPPN;
-        debug("malloc based on roll-out := "+result);
-        return result;
     }
 
-    protected static void invalidateSwapCacheForSpn(int spn) {
+    /**
+     * Finds all Swap Table entries who claim to live at the provided spn
+     * and notifies them they have been ejected from swap. This most often
+     * occurs when SwapFile re-allocates their swap page.
+     * @param spn the swap page number that has just been allocated.
+     */
+    protected static void ejectSwapTableEntriesForSpn(int spn) {
         debug("ENTER:invalidateSwapCacheForSpn("+spn+")");
+        Lib.assertTrue(_lock.isHeldByCurrentThread());
+        for (Integer pid : TABLE.keySet()) {
+            List<SwapAwareTranslationEntry> killed
+                    = new ArrayList<SwapAwareTranslationEntry>();
+            final Map<Integer, SwapAwareTranslationEntry> entryMap
+                    = TABLE.get(pid);
+            for (SwapAwareTranslationEntry entry : entryMap.values()) {
+                Lib.assertTrue(!entry.isInSwap(),
+                        "A Swap Entry in Main("+pid+")? Scandal!:"+entry+"\r\n"+entryMap);
+                if (entry.isInSwap() && entry.getSwapPageNumber() == spn) {
+                    entry.removedFromSwapfile();
+                    killed.add(entry);
+                }
+            }
+            for (SwapAwareTranslationEntry entry : killed) {
+                entryMap.remove(entry.getVpn());
+            }
+        }
         for (Integer pid : SWAP_TABLE.keySet()) {
-            java.util.List<SwapAwareTranslationEntry> killed
-                    = new java.util.ArrayList<SwapAwareTranslationEntry>();
+            List<SwapAwareTranslationEntry> killed
+                    = new ArrayList<SwapAwareTranslationEntry>();
             final Map<Integer, SwapAwareTranslationEntry> entryMap
                     = SWAP_TABLE.get(pid);
             for (SwapAwareTranslationEntry entry : entryMap.values()) {
                 if (entry.isInSwap() && entry.getSwapPageNumber() == spn) {
-                    SwapFile.free(new int[] { spn });
                     entry.removedFromSwapfile();
                     killed.add(entry);
                 }
@@ -333,32 +387,18 @@ public class InvertedPageTable
 		}
         if (! result) {
         	// check our copies
-        	if (CORE_MAP.containsKey(ppn)) {
-        		for (SwapAwareTranslationEntry entry : CORE_MAP.get(ppn)) {
-                    debug("CoreMapTLB[ppn="+ppn+"]:="+entry);
-        			if (entry.isValid() && entry.isDirty()) {
-        				result = true;
-        				break;
-        			}
+            for (Integer pid : TABLE.keySet()) {
+                for (SwapAwareTranslationEntry entry : TABLE.get(pid).values()) {
+                    if (entry.isValid() && entry.isDirty()) {
+                        result = true;
+                        break;
+                    }
                 }
             }
         }
         debug("RETURN:doesNeedRollOut("+ppn+"):"+result);
         return result;
     }
-
-	protected static TranslationEntry findProcTLBforPpn(int ppn) {
-		final int tlbSize = machine.getTlbSize();
-		TranslationEntry result = null;
-        for (int i = 0; i < tlbSize; i++) {
-			final TranslationEntry entry = machine.readTlbEntry(i);
-			if (entry.ppn == ppn) {
-				result = entry;
-				break;
-			}
-		}
-		return result;
-	}
 
 	public static TranslationEntry findProcTLBforVpn(int vpn) {
 		final int tlbSize = machine.getTlbSize();
@@ -373,8 +413,25 @@ public class InvertedPageTable
 		return result;
 	}
 
+    protected static TranslationEntry findProcTLBforPpn(int ppn) {
+        final int tlbSize = machine.getTlbSize();
+        TranslationEntry result = null;
+        for (int i = 0; i < tlbSize; i++) {
+            final TranslationEntry entry = machine.readTlbEntry(i);
+            if (entry.ppn == ppn) {
+                result = entry;
+                break;
+            }
+        }
+        return result;
+    }
+
     protected static int chooseVictimPage() {
-        return algorithm.findVictim();
+        int result;
+        _lock.release();
+        result = algorithm.findVictim();
+        _lock.acquire();
+        return result;
     }
 
     public static void addCoff(VMProcess process, int stackSize) {
@@ -384,9 +441,6 @@ public class InvertedPageTable
         final int pid = process.getPid();
         int sectionCount = coff.getNumSections();
         int pageCount = 0;
-        if (! TABLE.containsKey(pid)) {
-            TABLE.put(pid, new HashMap<Integer, SwapAwareTranslationEntry>());
-        }
         for (int i = 0; i < sectionCount; i++) {
             final CoffSection section = coff.getSection(i);
             final int length = section.getLength();
@@ -394,25 +448,21 @@ public class InvertedPageTable
             addCoffSection(pid, section, i);
             pageCount += length;
         }
-        final Map<Integer, SwapAwareTranslationEntry> pages = TABLE.get(pid);
         final int stackFrameCount = stackSize + 1; // for the arguments
         for (int i = 0; i < stackFrameCount; i++) {
             int vpn = pageCount + i;
             final boolean isStack = true;
-            SwapAwareTranslationEntry sate = new SwapAwareTranslationEntry(vpn, isStack);
-            pages.put(vpn, sate);
+            SwapAwareTranslationEntry sate
+                    = new SwapAwareTranslationEntry(vpn, isStack);
+            addToMainTable(pid, sate);
         }
-        debug("CoffLoad:PAGES="+pages);
+        debug("CoffLoad:PAGES="+TABLE.get(pid));
         _lock.release();
     }
 
     protected static void addCoffSection(int pid, CoffSection section, int sectionNumber) {
         Lib.assertTrue(_lock.isHeldByCurrentThread());
         debug("ENTER:addCoffSection("+pid+","+section+","+sectionNumber+")");
-        if (!TABLE.containsKey(pid)) {
-            TABLE.put(pid, new HashMap<Integer, SwapAwareTranslationEntry>());
-        }
-        final Map<Integer, SwapAwareTranslationEntry> pages = TABLE.get(pid);
         int baseVpn = section.getFirstVPN();
         int pageCount = section.getLength();
         for (int i = 0; i < pageCount; i++) {
@@ -420,7 +470,7 @@ public class InvertedPageTable
             final boolean readOnly = section.isReadOnly();
             SwapAwareTranslationEntry sate = new SwapAwareTranslationEntry(
             		vpn, readOnly, sectionNumber, i);
-            pages.put(vpn, sate);
+            addToMainTable(pid, sate);
         }
     }
 
@@ -454,6 +504,7 @@ public class InvertedPageTable
             return;
         }
         if (!entry.isValid()) {
+            tlbLoaded = false;
             if (!loadEntry(process, vpn)) {
                 Lib.assertTrue(false,
                     "unable to load \"used\" entry for ("+pid+","+vpn+"):\r\n"
@@ -498,7 +549,8 @@ public class InvertedPageTable
         if (entry.isValid()) {
             // clear the swap backing page since it needs to be re-writen now
             if (entry.isInSwap()) {
-                SwapFile.free(new int[] { entry.getSwapPageNumber() });
+                final int spn = entry.getSwapPageNumber();
+                ejectSwapTableEntriesForSpn(spn);
                 entry.removedFromSwapfile();
             }
             Lib.assertTrue(!entry.isReadOnly(),
@@ -580,38 +632,41 @@ public class InvertedPageTable
     }
 
     public static void syncAllProcTlb() {
+        _lock.acquire();
         int tlbSize = machine.getTlbSize();
         for (int i = 0; i < tlbSize; i++) {
             final TranslationEntry entry = machine.readTlbEntry(i);
             debug("SYNC:ProcTLB["+i+"]:="+entry);
             if (entry.valid) {
-                debug("\tSYNC:IPT-TLB["+i+"]:="+CORE_MAP.get(entry.ppn).get(0));
-                if (syncProcTlb(entry)) {
-                    debug("\tSYNC:IPT'-TLB["+i+"]:="+CORE_MAP.get(entry.ppn).get(0));
-                }
+                syncProcTlb(entry);
             }
         }
+        _lock.release();
     }
 
-    public static boolean syncProcTlb(TranslationEntry entry) {
-        if (! entry.valid) {
+    private static boolean syncProcTlb(TranslationEntry tlbEntry) {
+        Lib.assertTrue(_lock.isHeldByCurrentThread());
+        if (! tlbEntry.valid) {
             debug("Request to sync a non-valid TLB entry, which I ignored");
             return false;
         }
-        Lib.assertTrue(CORE_MAP.containsKey(entry.ppn),
-                "Cannot sync up a TLB for non-core "+entry);
-        final List<SwapAwareTranslationEntry> pages = CORE_MAP.get(entry.ppn);
+        Lib.assertTrue(CoreMap.containsPpn(tlbEntry.ppn),
+                "Cannot sync up a TLB for non-core "+tlbEntry);
         boolean result = false;
-        for (SwapAwareTranslationEntry sate : pages) {
-            Lib.assertTrue(sate.getPpn() == entry.ppn, "Bogus SATE "+sate);
-            if (sate.getVpn() == entry.vpn) {
-                if (entry.used) {
+        for (CoreMap.CoreMapEntry coreEntry : CoreMap.findEntriesForPpn(tlbEntry.ppn)) {
+            final SwapAwareTranslationEntry sate
+                    = findEntryForVpn(coreEntry.getPid(), coreEntry.getVpn());
+            Lib.assertTrue(null != sate,
+                    "Core Map contains "+coreEntry+" but IPT does not");
+            Lib.assertTrue(sate.getPpn() == tlbEntry.ppn, "Bogus SATE "+sate);
+            if (sate.getVpn() == tlbEntry.vpn) {
+                if (tlbEntry.used) {
                     if (! sate.isUsed()) {
                         result = true;
                         sate.markAsUsed();
                     }
                 }
-                if (entry.dirty) {
+                if (tlbEntry.dirty) {
                     if (! sate.isDirty()) {
                         result = true;
                         sate.markAsDirty();
@@ -622,14 +677,15 @@ public class InvertedPageTable
                 if (sate.isDirty()) {
                     // clear the swap backing page since it needs to be re-writen now
                     if (sate.isInSwap()) {
-                        SwapFile.free(new int[] { sate.getSwapPageNumber() });
-                        result = true;
+//                        final int spn = sate.getSwapPageNumber();
+//                        invalidateSwapCacheForSpn(spn);
                         sate.removedFromSwapfile();
+                        result = true;
                     }
                 }
-                Lib.assertTrue(sate.isReadOnly() == entry.readOnly,
+                Lib.assertTrue(sate.isReadOnly() == tlbEntry.readOnly,
                         "Mismatched r/o state: "+sate);
-                Lib.assertTrue(sate.isValid() == entry.valid,
+                Lib.assertTrue(sate.isValid() == tlbEntry.valid,
                         "Mismatched valid state: "+sate);
             }
         }
@@ -670,14 +726,8 @@ public class InvertedPageTable
      */
     private static Map<Integer, Map<Integer, SwapAwareTranslationEntry>>
         SWAP_TABLE = new HashMap<Integer, Map<Integer, SwapAwareTranslationEntry>>();
-    /**
-     * Indexes the PPN and the SATE page tables which are stored there.
-     * Since we did not implement shared loading, the size of the list will
-     * always be 1.
-     */
-    private static Map<Integer, List<SwapAwareTranslationEntry>>
-        CORE_MAP = new HashMap<Integer, List<SwapAwareTranslationEntry>>();
     private static Lock _lock = new Lock();
-    private static Algorithm algorithm = new RandomAlgorithm(CORE_MAP, _lock);
+    private static Algorithm algorithm = new RandomAlgorithm();
+//    private static Algorithm algorithm = new ClockAlgorithm();
     private static final char dbgFlag = 'I';
 }

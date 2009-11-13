@@ -1,15 +1,11 @@
 package nachos.vm;
 
-import java.util.List;
-import java.util.Map;
-
 import nachos.machine.Lib;
 import nachos.machine.Machine;
-import nachos.threads.Lock;
 
 public final class RandomAlgorithm implements Algorithm {
 
-	RandomAlgorithm(Map<Integer, List<SwapAwareTranslationEntry>> coreMap, Lock coreMapLock ){
+	RandomAlgorithm(){
 	}
 
 	@Override

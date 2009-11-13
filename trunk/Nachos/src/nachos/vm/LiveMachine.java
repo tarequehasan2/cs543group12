@@ -24,6 +24,11 @@ class LiveMachine implements IMachine
     }
 
     @Override
+    public int getNumPhysPages() {
+        return Machine.processor().getNumPhysPages();
+    }
+
+    @Override
     public int getTlbSize() {
         return Machine.processor().getTLBSize();
     }

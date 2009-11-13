@@ -21,15 +21,13 @@ public class VMProcess extends UserProcess
     public void saveState() {
         debug("saveState()");
         boolean intStatus = Machine.interrupt().disable();
+//        InvertedPageTable.syncAllProcTlb();
         tlbLock.acquire();
         final Processor proc = Machine.processor();
         final int tlbSize = proc.getTLBSize();
 		for (int i=0; i < tlbSize; i++){
 			TranslationEntry entry = proc.readTLBEntry(i);
             debug("ProcTLB["+i+"]:="+entry);
-            if (entry.valid) {
-                InvertedPageTable.syncProcTlb(entry);
-            }
 			entry.valid = false; // force a TLB miss
 			proc.writeTLBEntry(i, entry);
     	}
@@ -46,15 +44,13 @@ public class VMProcess extends UserProcess
         debug("restoreState()");
         debug("TLB:restoring");
         boolean intStatus = Machine.interrupt().disable();
+//        InvertedPageTable.syncAllProcTlb();
         tlbLock.acquire();
         final Processor proc = Machine.processor();
         final int tlbSize = proc.getTLBSize();
 		for (int i=0; i < tlbSize; i++){
 			TranslationEntry entry = proc.readTLBEntry(i);
             debug("ProcTLB["+i+"]:="+entry);
-            if (entry.valid) {
-                InvertedPageTable.syncProcTlb(entry);
-            }
 			entry.valid = false; // force a TLB miss
 			proc.writeTLBEntry(i, entry);
     	}
@@ -186,8 +182,11 @@ public class VMProcess extends UserProcess
     public void handleException(int cause) {
 //        debug("handleException("+cause+")");
 	    Processor processor = Machine.processor();
+
+        // take advantage of this call back into the OS to sync up the TLB
         InvertedPageTable.syncAllProcTlb();
-	switch (cause) {
+
+	    switch (cause) {
         case Processor.exceptionTLBMiss: {
             int badVaddr = processor.readRegister(Processor.regBadVAddr);
             debug("TLB Miss @x"+Integer.toHexString(badVaddr));
@@ -227,7 +226,7 @@ public class VMProcess extends UserProcess
         Lib.debug(dbgFlag,"DEBUG:"+toString()+":"+message);
     }
 
-//    private static final int pageSize = Processor.pageSize;
+    //    private static final int pageSize = Processor.pageSize;
     private static final char dbgFlag = 'P';
     private static final Lock tlbLock = new Lock();
     private static final Lock memoryLock = new Lock();
