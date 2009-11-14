@@ -47,7 +47,7 @@ public class InvertedPageTable
         debug("ENTER:loadEntry("+process+","+page+")");
 
         /// FIXME: is it worth going through Kernel.kernel and downcasting?
-        VMKernel.recordPageFault();
+        
 		final int pid = process.getPid();
 
 		SwapAwareTranslationEntry entry = findEntryForVpn(pid, page);
@@ -61,7 +61,7 @@ public class InvertedPageTable
         	debug("("+pid+","+page+") requested a load for what we think is a live frame ("+entry.getVpn()+","+entry.getPpn()+")");
             return true;
         }
-
+        VMKernel.recordPageFault();
         /// WARNING: the order matters here!
         if (entry.isInSwap()) {
             debug("Rolling pid="+pid+"'s back in from: "+entry);
