@@ -5,7 +5,7 @@ It is organized into the following sections:
 
  * COMPILATION WARNING
  * APPROACH
- * COMPILING THE TEST PROGRAMS 
+ * COMPILING THE TEST PROGRAMS
  * RUNNING THE TEST PROGRAMS
 
 
@@ -37,71 +37,91 @@ We will speak to each of the parts of the project 3 assignment in turn.
 
 This part was successfully implemented.
 
-The VMProcess class has been created to extend from the UserProcess 
-class as required.  Only functions that needed to be modified for the 
-functionality changes were overridden.  
+The VMProcess class has been created to extend from the UserProcess
+class as required. We had to increase the visibility of some of the methods
+in order to support them being overridden or called from the subclass. We now
+have a better understanding of how the classes are likely to be reused in
+the subsequent projects, so we do not expect to make a similar mistake next
+time. We also had to abstract out the direct access to the pageTable array
+in UserProcess, otherwise we would have to override the entire method which
+accessed the pageTable array.
 
-The handleTLBMiss function was added to deal with TLB misses.  The 
-process hands control to the IPT, which first synchronizes the translation 
-entries.  The IPT then pulls the entry into memory based on whether the entry 
-is in the swap, is a stack entry, or is a coff entry.  Finally, it 
-overwrites a random entry in the TLB with the new one.
+The handleTLBMiss function was added to deal with TLB misses.  The
+process hands control to the Inverted Page Table class, which we will refer to
+herein via its acronym: IPT. We take advantage of the Processor calling into the
+operating system to synchronizes the translation entries. This is so that our
+page table entries can "learn" if the Processor used or wrote to any page it
+was able to access via the TLB.
 
-On a context switch, the TLB entries are synchronized to update their status, 
-then all the TLB entries are invalidated.
+The IPT then pulls the entry into memory based on whether the entry
+is in the swap, is a stack entry, or is a coff entry.  Finally, it
+overwrites an entry of its choosing in the TLB with the new one.
 
-There is a single, global Inverted Page Table.  Since we have implemented 
-demand paging and virtual memory, the discussion of the functionality of 
-the IPT will be left to Part 2.
+On a context switch, the TLB entries are invalidated in order to force a TLB
+miss when the current process regains focus. One cannot merely cache the TLB
+entries because the OS is free to move the physical pages around "underneath"
+a process, and the only way to recover that information is via the TLB miss
+algorithm.
 
-The Inverted Page Table has several hash maps (TODO: I think this is changing to just one.  The others should be in part 2).  
-The first indexes a pid to a hash map that indexes vpns to an entry. 
-This is used to find the swap aware entry based on the vpn and pid.  The 
-second is the same structure as the first, but is used to store all the 
-entries that are in the swap file.  The final map indexes a ppn to a 
-list of TLB entries.  This is the actual contents of memory.
+VMProcess also overrides readVirtualMemory and writeVirtualMemory. By doing so,
+we can keep the used and dirty status bits in sync for syscall originated
+reads and writes.
 
 === Part 2 ===
 
 This part was successfully implemented.
 
-To ease processing and storage of translation entries, we have implemented a 
-swap aware translation entry.  This keeps track of whether the entry is coff or stack, 
-the location of the swap, the coff page and section, and all other normal translation 
-entry data.  It has a function to allow conversion to a normal translation entry. 
+We implemented a core map, as was requested. This map is keyed by physical
+page number, and it holds a list of (pid,vpn) tuples. However, because we did
+not implement section sharing (as discussed in the text), the list will always
+be of size one for this project.
 
-In order to implement demand paging, we first added a core map.  This 
-is implemented using a hash map that maps ppns to the swap aware translation entry that 
-is contained in that page.
+The Inverted Page Table has two maps to keep track of the page tables
+for all processes in the system. The first indexes a pid to a map of its page
+tables by virtual page number. The second is the same structure, but is used
+exclusively for page tables that represent swap entries.
 
-In order to located entries in the swap, we have a separate hash map that maps 
-pids to a hash map that maps vpns to swap aware translation entries.  
+To ease processing and storage of translation entries, we have implemented a
+swap aware translation entry, which resembles the vanilla Translation Entry but
+with extra fields for our needs. It keeps track of whether the entry is a coff
+page, or stack page, if the entry is in swap (and the location of the swap page),
+the source coff page and section, in addition to the other normal translation
+entry data. It has a function to allow conversion to a normal translation entry.
 
-To ease testing, we implemented an interface called Algorithm which is used for 
-page replacement.  We implemented both a random choice page replacement algorithm 
-and a second chance clock algorithm, as described in the text.  Currently, the 
-chosen class is hard-coded, so no runtime changes are possible.
+To ease testing, we implemented an interface called Algorithm which is used for
+page replacement.  We implemented both a random choice page replacement algorithm
+and a second chance clock algorithm, as described in the text. One may replace
+the algorithm by editing the nachos.conf file.
 
-Once a victim page is chosen, it is only written to swap if it is dirty.  
-It is removed from the core map and any TLB entries are invalidated.
+Once a victim page is chosen, it is only written to swap if it is dirty.
+It is removed from the core map, the bookkeeping entries in the IPT are updated
+and any TLB entries pointing to that physical page are invalidated.
 
-The swap file is handled as a file using the machine's provided filesystem.  
-Since the swap aware translation entries track their location in the swap, 
-the swap file class only has functions that move entries in and out of the 
-swap file.  The swap file assumes that the calling function locked 
-the memory as needed.  The VMProcess terminate function has been 
+The swap file is handled as a file using the machine's provided filesystem.
+Since the swap aware translation entries track their location in the swap,
+the swap file class only has functions that move entries in and out of the
+swap file.  The swap file assumes that the calling function locked
+the memory as needed.  The VMProcess terminate function has been
 overridden to close the swap file in order to clean up.
+
+We used the provided coff files, including matmult.coff and sort.coff, in
+combination with sh.coff to exercise the virtual memory manager heavily.
 
 === Part 3 ===
 
 This part was successfully implemented.
 
-Lazy loading was achieved by overriding loadSections.  The function now 
-calls IPT.addCoff().  This function creates page entries for each 
-coff section, making sure to set the entry to read only.  It also 
-creates an entry for each stack page.  None of the entries are added 
-to the TLB, so they are loaded as the process attempts to read them.
+Lazy loading was achieved by overriding loadSections.  The function now
+calls IPT.addCoff().  This function creates page entries for each
+coff section, making sure to set the entry to read only if it is declared as
+such in the source coff.  It also creates a page table entry for each stack
+page, plus one for the program's arguments (just like UserProcess does), but
+does not actually allocate any memory at all during loadSections. We chose to
+implement a "purely virtual" paging scheme, so none of the entries are loaded
+into memory until their frames are referenced by a TLB miss.
 
+When a coff is loaded, the number of stack frames is taken from the variable
+in UserProcess, so no changes were made to that value for this project.
 
 == COMPILING THE TEST PROGRAMS ==
 
@@ -120,7 +140,7 @@ In order to use the Makefile, three preconditions must be met:
    It is our recommendation that one use the shell variable, as it
    reduces the error rate, but they are both equally effective.
 
-3. you must include (preferably prepend) that same ARCHDIR to your 
+3. you must include (preferably prepend) that same ARCHDIR to your
    shell's "PATH" variable
 
 For example, let's assume your MIPS cross-compiler is in a directory named
@@ -148,38 +168,20 @@ sh$ make "TARGETS=50files bigmem"
 
 == RUNNING THE TEST PROGRAMS ==
 
-In this section, we will look at each of the test programs created for
-the project, how to run them and what they are expected to prove (or
-disprove).
+We did not create new coff programs for this project. We found the existing
+ones exercised the memory subsystem well enough for our needs.
 
-//TODO: which coffs are run for this?
-* 50files.coff:
-  shows that we can open, close and unlink 50 files
-* bigmem.coff:
-  shows that the kernel will not load an executable 
-  which does not fit in memory
-* longFile.coff:
-  shows that we successfully check the string length for calls to creat.
-* LotsOfFiles.coff:
-  shows that we are able to open, close and unlink a large number of files
-* rmhi.coff:
-  was an early test showing that we can unlink a file named "hi.txt"
-* runnit.coff:
-  shows that fork and join work correctly
-  also shows that one can call join with various invalid arguments 
-  and the correct error codes are returned
+We made heavy use of matmult.coff, sort.coff, and repeated invocations of
+echo.coff, cp.coff and rm.coff invoked from under sh.coff.
 
-  Be aware that the SyncConsole is character buffered, not line
-  buffered like wih Unix. This means that the output from echo.coff
-  (the child process) is interleaved with the output from runnit.coff
-  (the parent). It looks like garbage, but it's just interleaving. All
-  characters are accounted for.
+We used sh.coff not only because that is the only way to pass arguments, 
+but also because having sh.coff already loaded in memory before we execute
+any subprocess increases the strain upon the virtual memory subsystem.
 
-* sayhi.coff:
-  was an early test showing that we can creat a file named "hi.txt",
-  write characters to it and then read them back successfully
+We also found early in our debugging efforts that different randomizer seed
+values (the "-s" argument to Nachos) produced varying degrees of success
+when using the random page replacement algorithm (as one would expect). Thus,
+in order to fully stress our system, we iteratively ran those coff files
+using a sequence of "-s" values to minimize the chances of it "randomly
+succeeding".
 
-Due to a limitation with the way Nachos parses command-line arguments,
-if one wishes to use the provided COFF programs (e.g. cat.coff,
-cp.coff, echo.coff, etc), then one must start Nachos with "sh.coff"
-and then invoke the COFF programs as children of the Nachos shell.
