@@ -90,8 +90,20 @@ entry data. It has a function to allow conversion to a normal translation entry.
 
 To ease testing, we implemented an interface called Algorithm which is used for
 page replacement.  We implemented both a random choice page replacement algorithm
-and a second chance clock algorithm, as described in the text. One may replace
-the algorithm by editing the nachos.conf file.
+and a modified version of the second chance clock algorithm, as described in the 
+text.  The algorithm utilizes a generational method of choosing a page to evict
+from memory.  It cycles through all of the physical pages once per call starting
+at the first page and ending at the last.  Each cycle, or generation, where a 
+page is unused, a counter is incremented.  If it is used, the same counter is 
+decremented.  The algorithm will choose one of the pages matching the highest 
+unused count.  The idea is that if is hasn't been used in a while, it is less likely
+to be used again as one that has been used recently.  If a page is chosen, the counter
+is reset, as we do not know how frequently the new page will be used.  One inefficiency
+of this algorithm is that we cannot mark a dirty page unused.  Or we risk
+synchronization issues with the TLB (Synchronizing dirty pages would be too inefficient).
+It is possible, then that a frequently dirty page can be selected by the algorithm,
+which would force a TLB miss.  One may replace the algorithm class by editing the 
+nachos.conf file.
 
 Once a victim page is chosen, it is only written to swap if it is dirty.
 It is removed from the core map, the bookkeeping entries in the IPT are updated
@@ -177,6 +189,10 @@ echo.coff, cp.coff and rm.coff invoked from under sh.coff.
 We used sh.coff not only because that is the only way to pass arguments, 
 but also because having sh.coff already loaded in memory before we execute
 any subprocess increases the strain upon the virtual memory subsystem.
+
+We discovered that bigmem.coff, which failed previously because it did not 
+fit in to physical memory, loads and runs successfully now that we have access
+to a swap file.
 
 We also found early in our debugging efforts that different randomizer seed
 values (the "-s" argument to Nachos) produced varying degrees of success
