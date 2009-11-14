@@ -24,7 +24,9 @@ threads =	ThreadedKernel KThread Alarm \
 
 userprog =	UserKernel UThread UserProcess SynchConsole
 
-vm =		VMKernel VMProcess
+vm =		VMKernel VMProcess Algorithm ClockAlgorithm CoreMap \
+		IMachine InvertedPageTable InvertedPageTableTest LiveMachine MockMachine \
+		ProcessorUtil RandomAlgorithm SwapAwareTranslationEntry SwapFile SwapFileTest	
 
 network = 	NetKernel NetProcess PostOffice MailMessage
 
