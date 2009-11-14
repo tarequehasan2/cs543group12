@@ -53,7 +53,7 @@ public class VMKernel extends UserKernel {
         debug("terminate()");
         SwapFile.close();
         debug("closed SwapFile");
-        System.out.println("VMM Paging: page faults "+pageFaults);
+        System.out.println("VMM Paging: page faults "+pageFaults+ " using the algorithm: "+ InvertedPageTable.algorithm.getClass().getCanonicalName());
     	super.terminate();
     }
 
