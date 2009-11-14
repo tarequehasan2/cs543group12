@@ -7,12 +7,16 @@ import java.util.Map;
 
 import nachos.machine.Coff;
 import nachos.machine.CoffSection;
+import nachos.machine.Config;
 import nachos.machine.Lib;
 import nachos.machine.TranslationEntry;
 import nachos.threads.Lock;
 
 public class InvertedPageTable
 {
+	static {
+			algorithm = (Algorithm) Lib.constructObject(Config.getString("Algorithm"));
+	}
     protected static IMachine machine = LiveMachine.getInstance();
 
     public static boolean handleTLBMiss(VMProcess process, int page) {
@@ -739,7 +743,6 @@ public class InvertedPageTable
     private static Map<Integer, Map<Integer, SwapAwareTranslationEntry>>
         SWAP_TABLE = new HashMap<Integer, Map<Integer, SwapAwareTranslationEntry>>();
     private static Lock _lock = new Lock();
-//    private static Algorithm algorithm = new RandomAlgorithm();
-    private static Algorithm algorithm = new ClockAlgorithm();
+    protected static Algorithm algorithm;
     private static final char dbgFlag = 'I';
 }
