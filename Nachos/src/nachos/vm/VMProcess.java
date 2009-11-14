@@ -227,17 +227,13 @@ public class VMProcess extends UserProcess
      * TLB miss.
      */
     protected void handleTLBMiss(int vaddr) {
-//        boolean intStatus = Machine.interrupt().disable();
         int page = Processor.pageFromAddress(vaddr);
         debug("vaddr("+Integer.toHexString(vaddr)+"):=pid="+getPid()+";vpn="+page);
         if (!InvertedPageTable.handleTLBMiss(this, page)) {
             error("Unable to handle TLB miss; exit(1)");
-//            Machine.interrupt().setStatus(intStatus);
             final int exitCode = 1;
             handleSyscall(syscallExit, exitCode, 0, 0, 0);
-//            return;
         }
-//        Machine.interrupt().setStatus(intStatus);
     }
 
     private void error(String message) {
