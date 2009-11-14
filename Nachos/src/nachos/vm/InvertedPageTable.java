@@ -15,7 +15,16 @@ import nachos.threads.Lock;
 public class InvertedPageTable
 {
 	static {
-			algorithm = (Algorithm) Lib.constructObject(Config.getString("Algorithm"));
+		try{
+			String className = Config.getString("Algorithm");
+			if (className != null && !className.equals("")){
+				algorithm = (Algorithm) Lib.constructObject(Config.getString("Algorithm"));
+			}else{
+				algorithm = new ClockAlgorithm();
+			}
+		}catch(Throwable t){
+			algorithm = new ClockAlgorithm();
+		}
 	}
     protected static IMachine machine = LiveMachine.getInstance();
 
