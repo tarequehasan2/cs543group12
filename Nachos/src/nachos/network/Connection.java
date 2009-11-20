@@ -2,8 +2,9 @@ package nachos.network;
 
 import static nachos.network.ConnectionState.*;
 import static nachos.network.ConnectionEvent.*;
+import nachos.machine.OpenFile;
 
-public final class Connection {
+public final class Connection extends OpenFile {
 	
 	private ConnectionState connectionState = CLOSED;
 	
@@ -79,6 +80,41 @@ public final class Connection {
 	public void clearSendWindow() {
 		// TODO Auto-generated method stub
 		
+	}
+
+	public int connect(int a0, int a1) {
+		// TODO Auto-generated method stub
+		return -1;
+	}
+
+	@Override
+	public void close() {
+		// TODO Auto-generated method stub
+		//super.close();
+	}
+
+	@Override
+	public int read(byte[] buf, int offset, int length) {
+		// TODO Auto-generated method stub
+		return -1;
+	}
+
+	@Override
+	public int read(int pos, byte[] buf, int offset, int length) {
+		// TODO Auto-generated method stub
+		return -1;
+	}
+
+	@Override
+	public int write(byte[] buf, int offset, int length) {
+		// TODO Auto-generated method stub
+		return -1;
+	}
+
+	@Override
+	public int write(int pos, byte[] buf, int offset, int length) {
+		// TODO Auto-generated method stub
+		return -1;
 	}
 	
 

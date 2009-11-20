@@ -209,8 +209,7 @@ public final class ConnectionTransition {
 			connection.setConnectionState(SYN_SENT);
 			connection.block();
 		case RECV:
-			boolean dequeued = connection.dequeue();
-			if (!dequeued){
+			if (!connection.dequeue()){
 				throw new FailSyscall();
 			}
 			break;
