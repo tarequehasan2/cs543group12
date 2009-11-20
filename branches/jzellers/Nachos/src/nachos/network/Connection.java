@@ -3,6 +3,7 @@ package nachos.network;
 import static nachos.network.ConnectionState.*;
 import static nachos.network.ConnectionEvent.*;
 import nachos.machine.OpenFile;
+import nachos.threads.KThread;
 
 public final class Connection extends OpenFile {
 	
@@ -89,8 +90,20 @@ public final class Connection extends OpenFile {
 
 	@Override
 	public void close() {
-		// TODO Auto-generated method stub
-		//super.close();
+		try {
+			ConnectionTransition.doEvent(this, CLOSE);
+			new KThread(new ConnectionFinisher(this)).fork();
+		} catch (FailSyscall e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ProtocolError e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ProtocolDeadlock e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
 	}
 
 	@Override
@@ -115,6 +128,11 @@ public final class Connection extends OpenFile {
 	public int write(int pos, byte[] buf, int offset, int length) {
 		// TODO Auto-generated method stub
 		return -1;
+	}
+
+	public void finish() {
+		// TODO Auto-generated method stub
+		
 	}
 	
 
