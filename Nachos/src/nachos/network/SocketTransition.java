@@ -5,52 +5,52 @@ import static nachos.network.SocketEvent.*;
 
 public final class SocketTransition {
 	
-	public static void doEvent(Socket connection, SocketEvent event) throws FailSyscall, ProtocolError, ProtocolDeadlock{
-		switch (connection.getConnectionState()){
+	public static void doEvent(Socket socket, SocketEvent event) throws FailSyscall, ProtocolError, ProtocolDeadlock{
+		switch (socket.getSocketState()){
 		case CLOSED:
-			doClosed(connection, event);
+			doClosed(socket, event);
 			break;
 		case SYN_SENT:
-			doSynSent(connection, event);
+			doSynSent(socket, event);
 			break;
 		case SYN_RCVD:
-			doSynRcvd(connection, event);
+			doSynRcvd(socket, event);
 			break;
 		case ESTABLISHED:
-			doEstablished(connection, event);
+			doEstablished(socket, event);
 			break;
 		case STP_RCVD:
-			doStpRcvd(connection, event);
+			doStpRcvd(socket, event);
 			break;
 		case STP_SENT:
-			doStpSent(connection, event);
+			doStpSent(socket, event);
 			break;
 		case CLOSING:
-			doClosing(connection, event);
+			doClosing(socket, event);
 			break;
 		
 		}
 		
 	}
 
-	private static void doClosing(Socket connection, SocketEvent event) throws FailSyscall, ProtocolError {
+	private static void doClosing(Socket socket, SocketEvent event) throws FailSyscall, ProtocolError {
 		switch (event){
 		case TIMER:
-			connection.send(FIN);
+			socket.send(FIN);
 			break;
 		case SYN:
-			connection.send(SYNACK);
+			socket.send(SYNACK);
 			break;
 		case DATA:
 		case STP:
-			connection.send(FIN);
+			socket.send(FIN);
 			break;
 		case FIN:
-			connection.send(FINACK);
-			connection.setConnectionState(CLOSED);
+			socket.send(FINACK);
+			socket.setSocketState(CLOSED);
 			break;
 		case FINACK:
-			connection.setConnectionState(CLOSED);
+			socket.setSocketState(CLOSED);
 			break;
 		default:
 			throw new ProtocolError();
@@ -58,33 +58,33 @@ public final class SocketTransition {
 
 	}
 
-	private static void doStpSent(Socket connection, SocketEvent event) throws ProtocolError {
+	private static void doStpSent(Socket socket, SocketEvent event) throws ProtocolError {
 		switch (event){
 		case TIMER:
-			connection.resendPackets();
+			socket.resendPackets();
 			break;
 		case SYN:
-			connection.send(SYNACK);
+			socket.send(SYNACK);
 			break;
 		case DATA:
-			connection.send(STP);
+			socket.send(STP);
 			break;
 		case ACK:
-			connection.shiftSendWindow();
-			connection.sendData();
-			if (connection.isSendQueueEmpty()){
-				connection.send(FIN);
-				connection.setConnectionState(CLOSING);
+			socket.shiftSendWindow();
+			socket.sendData();
+			if (socket.isSendQueueEmpty()){
+				socket.send(FIN);
+				socket.setSocketState(CLOSING);
 			}
 			break;
 		case STP:
-			connection.clearSendWindow();
-			connection.send(FIN);
-			connection.setConnectionState(CLOSING);
+			socket.clearSendWindow();
+			socket.send(FIN);
+			socket.setSocketState(CLOSING);
 			break;
 		case FIN:
-			connection.send(FINACK);
-			connection.setConnectionState(CLOSED);
+			socket.send(FINACK);
+			socket.setSocketState(CLOSED);
 			break;
 		case FINACK:
 		default:
@@ -92,24 +92,24 @@ public final class SocketTransition {
 		}
 	}
 
-	private static void doStpRcvd(Socket connection, SocketEvent event) throws ProtocolError, FailSyscall {
+	private static void doStpRcvd(Socket socket, SocketEvent event) throws ProtocolError, FailSyscall {
 		switch (event){
 		case RECV:
-			connection.dequeue();
+			socket.dequeue();
 			break;
 		case SEND:
 			throw new FailSyscall();
 		case CLOSE:
-			connection.send(FIN);
-			connection.setConnectionState(CLOSING);
+			socket.send(FIN);
+			socket.setSocketState(CLOSING);
 			break;
 		case DATA:
-			connection.queue();
-			connection.send(ACK);
+			socket.queue();
+			socket.send(ACK);
 			break;
 		case FIN:
-			connection.send(FINACK);
-			connection.setConnectionState(CLOSED);
+			socket.send(FINACK);
+			socket.setSocketState(CLOSED);
 			break;
 		case ACK:
 		case FINACK:
@@ -118,46 +118,46 @@ public final class SocketTransition {
 		}
 	}
 
-	private static void doEstablished(Socket connection, SocketEvent event) throws ProtocolError {
+	private static void doEstablished(Socket socket, SocketEvent event) throws ProtocolError {
 		switch (event){
 		case RECV:
-			connection.dequeue();
+			socket.dequeue();
 			break;
 		case SEND:
-			connection.queue();
-			connection.shiftSendWindow();
+			socket.queue();
+			socket.shiftSendWindow();
 			break;
 		case CLOSE:
-			if (connection.isSendQueueEmpty()){
-				connection.send(FIN);
-				connection.setConnectionState(CLOSING);
+			if (socket.isSendQueueEmpty()){
+				socket.send(FIN);
+				socket.setSocketState(CLOSING);
 			}else{
-				connection.send(STP);
-				connection.setConnectionState(STP_SENT);
+				socket.send(STP);
+				socket.setSocketState(STP_SENT);
 			}
 			break;
 		case TIMER:
-			connection.resendPackets();
+			socket.resendPackets();
 			break;
 		case SYN:
-			connection.send(SYNACK);
+			socket.send(SYNACK);
 			break;
 		case DATA:
-			connection.queue();
-			connection.send(ACK);
+			socket.queue();
+			socket.send(ACK);
 			break;
 		case ACK:
-			connection.shiftSendWindow();
-			connection.sendData();
+			socket.shiftSendWindow();
+			socket.sendData();
 			break;
 		case STP:
-			connection.clearSendWindow();
-			connection.setConnectionState(STP_RCVD);
+			socket.clearSendWindow();
+			socket.setSocketState(STP_RCVD);
 			break;
 		case FIN:
-			connection.clearSendWindow();
-			connection.send(FINACK);
-			connection.setConnectionState(CLOSED);
+			socket.clearSendWindow();
+			socket.send(FINACK);
+			socket.setSocketState(CLOSED);
 			break;
 		case FINACK:
 		default:
@@ -165,11 +165,11 @@ public final class SocketTransition {
 		}
 	}
 
-	private static void doSynRcvd(Socket connection, SocketEvent event) throws ProtocolError {
+	private static void doSynRcvd(Socket socket, SocketEvent event) throws ProtocolError {
 		switch (event){
 		case ACCEPT:
-			connection.send(SYNACK);
-			connection.setConnectionState(ESTABLISHED);
+			socket.send(SYNACK);
+			socket.setSocketState(ESTABLISHED);
 			break;
 		case DATA:
 		case ACK:
@@ -181,19 +181,19 @@ public final class SocketTransition {
 		}
 	}
 
-	private static void doSynSent(Socket connection, SocketEvent event) throws ProtocolDeadlock, ProtocolError {
+	private static void doSynSent(Socket socket, SocketEvent event) throws ProtocolDeadlock, ProtocolError {
 		switch (event) {
 		case TIMER:
 		case DATA:
 		case STP:
 		case FIN:
-			connection.send(SYN);
+			socket.send(SYN);
 			break;
 		case SYN:
 			throw new ProtocolDeadlock();
 		case SYNACK:
-			connection.setConnectionState(ESTABLISHED);
-			connection.wakeConnectThread();
+			socket.setSocketState(ESTABLISHED);
+			socket.wakeConnectThread();
 			break;
 		case ACK:
 		default:
@@ -202,24 +202,24 @@ public final class SocketTransition {
 		
 	}
 
-	private static void doClosed(Socket connection, SocketEvent event) throws FailSyscall, ProtocolError {
+	private static void doClosed(Socket socket, SocketEvent event) throws FailSyscall, ProtocolError {
 		switch (event){
 		case CONNECT:
-			connection.send(SYN);
-			connection.setConnectionState(SYN_SENT);
-			connection.block();
+			socket.send(SYN);
+			socket.setSocketState(SYN_SENT);
+			socket.block();
 		case RECV:
-			if (!connection.dequeue()){
+			if (!socket.dequeue()){
 				throw new FailSyscall();
 			}
 			break;
 		case SEND:
 			throw new FailSyscall();
 		case SYN:
-			connection.setConnectionState(SYN_RCVD);
+			socket.setSocketState(SYN_RCVD);
 			break;
 		case FIN:
-			connection.send(FINACK);
+			socket.send(FINACK);
 			break;
 		case DATA:
 		case ACK:

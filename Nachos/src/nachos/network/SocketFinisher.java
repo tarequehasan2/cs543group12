@@ -2,15 +2,15 @@ package nachos.network;
 
 public class SocketFinisher implements Runnable {
 
-	Socket connection;
+	Socket socket;
 	
-	SocketFinisher(Socket connection){
-		this.connection = connection;
+	SocketFinisher(Socket socket){
+		this.socket = socket;
 	}
 	
 	@Override
 	public void run() {
-		connection.finish();
+		socket.finish();
 	}
 
 }

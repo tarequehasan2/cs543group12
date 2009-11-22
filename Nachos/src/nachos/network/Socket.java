@@ -7,7 +7,15 @@ import nachos.threads.KThread;
 
 public final class Socket extends OpenFile {
 	
-	private SocketState connectionState = CLOSED;
+	
+	
+	private SocketState socketState = CLOSED;
+	
+	public Socket() {
+		new KThread(new SocketReceiver(this)).fork();
+		new KThread(new SocketSender(this)).fork();
+		new KThread(new SocketRetransmitter(this)).fork();
+	}
 	
 	void testTransition(){
 		SocketEvent event = FIN;
@@ -25,12 +33,12 @@ public final class Socket extends OpenFile {
 		}
 	}
 
-	public SocketState getConnectionState() {
-		return connectionState;
+	public SocketState getSocketState() {
+		return socketState;
 	}
 
-	public void setConnectionState(SocketState connectionState) {
-		this.connectionState = connectionState;
+	public void setSocketState(SocketState socketState) {
+		this.socketState = socketState;
 	}
 
 	public void send(SocketEvent event) {

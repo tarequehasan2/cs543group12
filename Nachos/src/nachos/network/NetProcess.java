@@ -14,7 +14,7 @@ public class NetProcess extends VMProcess {
      */
     public NetProcess() {
     	super();
-    	connection = new Socket();
+    	socket = new Socket();
     }
 
     private static final int
@@ -57,7 +57,7 @@ public class NetProcess extends VMProcess {
      * Returns the new file descriptor, or -1 if an error occurred.
      */
     private int handleConnect(int a0, int a1) {
-		return connection.connect(a0, a1);
+		return socket.connect(a0, a1);
 	}
 
     /**
@@ -93,5 +93,5 @@ public class NetProcess extends VMProcess {
  	}
 
 	
-	Socket connection;
+	Socket socket;
 }
