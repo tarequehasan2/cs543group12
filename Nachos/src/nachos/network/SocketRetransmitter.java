@@ -17,10 +17,21 @@ public class SocketRetransmitter implements Runnable {
 	
 	private void resendPackets() {
 		while (true){
-			socket.resendPackets();
 			long currentTime = Machine.timer().getTime();
 			long waitTime = currentTime + RETRANSMIT_TICKS;
 			NetKernel.alarm.waitUntil(waitTime);
+			try {
+				SocketTransition.doEvent(socket, SocketEvent.TIMER);
+			} catch (FailSyscall e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (ProtocolError e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (ProtocolDeadlock e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 		}
 	}
 }
