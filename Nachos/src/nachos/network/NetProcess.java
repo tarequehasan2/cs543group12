@@ -14,7 +14,7 @@ public class NetProcess extends VMProcess {
      */
     public NetProcess() {
     	super();
-    	connection = new Connection();
+    	connection = new Socket();
     }
 
     private static final int
@@ -93,5 +93,5 @@ public class NetProcess extends VMProcess {
  	}
 
 	
-	Connection connection;
+	Socket connection;
 }
