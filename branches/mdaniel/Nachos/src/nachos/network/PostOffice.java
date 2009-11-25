@@ -66,6 +66,19 @@ public class PostOffice {
 	return mail;
     }
 
+    public MailMessage receiveNB(int port) {
+	Lib.assertTrue(port >= 0 && port < queues.length);
+
+	Lib.debug(dbgNet, "checking for mail on port " + port);
+
+	MailMessage mail = (MailMessage) queues[port].removeFirstWithoutBlocking();
+
+	if (null != mail && Lib.test(dbgNet))
+	    System.out.println("got mail on port " + port + ": " + mail);
+
+	return mail;
+    }
+
     /**
      * Wait for incoming messages, and then put them in the correct mailbox.
      */

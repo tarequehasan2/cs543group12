@@ -1,8 +1,8 @@
 package nachos.threads;
 
 import java.util.LinkedList;
-import nachos.machine.*;
-import nachos.threads.*;
+
+import nachos.machine.Lib;
 
 /**
  * A synchronized queue.
@@ -25,7 +25,7 @@ public class SynchList {
      */
     public void add(Object o) {
 	Lib.assertTrue(o != null);
-	
+
 	lock.acquire();
 	list.add(o);
 	listEmpty.wake();
@@ -50,12 +50,26 @@ public class SynchList {
 	return o;
     }
 
+    public Object removeFirstWithoutBlocking() {
+	Object o;
+
+	lock.acquire();
+	if (list.isEmpty()) {
+        lock.release();
+	    return null;
+    }
+	o = list.removeFirst();
+	lock.release();
+
+	return o;
+    }
+
     private static class PingTest implements Runnable {
 	PingTest(SynchList ping, SynchList pong) {
 	    this.ping = ping;
 	    this.pong = pong;
 	}
-	
+
 	public void run() {
 	    for (int i=0; i<10; i++)
 		pong.add(ping.removeFirst());
@@ -75,9 +89,8 @@ public class SynchList {
 	new KThread(new PingTest(ping, pong)).setName("ping").fork();
 
 	for (int i=0; i<10; i++) {
-	    Integer o = new Integer(i);
-	    ping.add(o);
-	    Lib.assertTrue(pong.removeFirst() == o);
+        ping.add(i);
+	    Lib.assertTrue(pong.removeFirst() == (Integer) i);
 	}
     }
 
