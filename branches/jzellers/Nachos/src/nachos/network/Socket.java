@@ -2,8 +2,17 @@ package nachos.network;
 
 import static nachos.network.SocketState.*;
 import static nachos.network.SocketEvent.*;
+
+import java.util.EnumSet;
+
+import javax.swing.plaf.basic.BasicInternalFrameTitlePane.MaximizeAction;
+
+import nachos.machine.Lib;
+import nachos.machine.Machine;
+import nachos.machine.MalformedPacketException;
 import nachos.machine.OpenFile;
 import nachos.threads.KThread;
+import nachos.threads.Lock;
 
 public final class Socket extends OpenFile {
 	
@@ -15,6 +24,8 @@ public final class Socket extends OpenFile {
 		new KThread(new SocketReceiver(this)).fork();
 		new KThread(new SocketSender(this)).fork();
 		new KThread(new SocketRetransmitter(this)).fork();
+		sendLock = new Lock();
+		packetQueue = new MailMessage[windowSize];
 	}
 	
 	void testTransition(){
@@ -92,12 +103,41 @@ public final class Socket extends OpenFile {
 	}
 
 	public int connect(int a0, int a1) {
-		// TODO Auto-generated method stub
+    	debug("connect("+a0+","+a1+")");
+		try {
+			sendLock.acquire();
+			SocketTransition.doEvent(this, CONNECT);
+			//TODO how do we handle local ports?
+			// At the socket level, do we need more than just a0 and a1?
+			int srcLink = Machine.networkLink().getLinkAddress();
+			int srcPort = 4;
+			EnumSet<PacketHeaderFlags> flags = EnumSet.of(PacketHeaderFlags.SYN);
+			byte[] contents = new byte[0];
+			ProtocolPacket packet = new ProtocolPacket(a0, srcLink, a1, srcPort, currentSeqNum, flags, contents);
+			// TODO: how do we send the packet?
+		} catch (FailSyscall e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (MalformedPacketException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ProtocolError e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ProtocolDeadlock e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		finally
+		{
+			sendLock.release();
+		}
 		return -1;
 	}
 
 	@Override
 	public void close() {
+    	debug("close()");
 		try {
 			SocketTransition.doEvent(this, CLOSE);
 			new KThread(new SocketFinisher(this)).fork();
@@ -142,6 +182,20 @@ public final class Socket extends OpenFile {
 		// TODO Auto-generated method stub
 		
 	}
-	
 
+    /**
+     * Reports a debug message iff the operating system is running with
+     * our specific debug flag turned on. The message will be qualified
+     * with the current process's <tt>PID</tt>.
+     * @param msg the message to report if running in debug mode.
+     */
+    private void debug(String msg) {
+    	Lib.debug(dbgProcess, "DEBUG:"+toString()+":"+msg);
+    }
+
+    private static final char dbgProcess = 's';
+	public static final int windowSize = 16;
+	private MailMessage[] packetQueue = null;
+	int currentSeqNum = 0;
+    private Lock sendLock;
 }
