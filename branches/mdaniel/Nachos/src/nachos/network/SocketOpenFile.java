@@ -4,7 +4,7 @@ import nachos.machine.OpenFile;
 
 public class SocketOpenFile extends OpenFile
 {
-    public SocketOpenFile(MailMessage msg) {
+    public SocketOpenFile(NachosMessage msg) {
         super();
         _msg = msg;
     }
@@ -12,7 +12,7 @@ public class SocketOpenFile extends OpenFile
     @Override
     public void close() {
         closeErrno = ((NetKernel)NetKernel.kernel)
-                .close(_msg.packet.srcLink, _msg.srcPort, _msg.dstPort);
+                .close(_msg.getSourceHost(), _msg.getSourcePort(), _msg.getDestPort());
     }
 
     @Override
@@ -23,7 +23,7 @@ public class SocketOpenFile extends OpenFile
     @Override
     public int write(byte[] buf, int offset, int length) {
         return ((NetKernel)NetKernel.kernel)
-                .write(_msg.packet.srcLink, _msg.srcPort, _msg.dstPort,
+                .write(_msg.getSourceHost(), _msg.getSourcePort(), _msg.getDestPort(),
                         buf, offset, length);
     }
 
@@ -51,6 +51,6 @@ public class SocketOpenFile extends OpenFile
     public void seek(int pos) {
     }
 
-    private MailMessage _msg;
+    private NachosMessage _msg;
     int closeErrno;
 }

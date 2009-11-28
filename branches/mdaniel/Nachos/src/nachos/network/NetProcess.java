@@ -46,7 +46,7 @@ public class NetProcess extends VMProcess {
 
     protected int handleAccept(int port) {
         debug("ACCEPT("+port+")");
-        MailMessage syn = ((NetKernel) NetKernel.kernel).accept(port);
+        NachosMessage syn = ((NetKernel) NetKernel.kernel).accept(port);
         if (null == syn) {
             // we don't know if it didn't shake or error, but either way ...
             return -1;
@@ -58,7 +58,7 @@ public class NetProcess extends VMProcess {
 
     protected int handleConnect(int host, int port) {
         debug("CONNECT("+host+","+port+")");
-        MailMessage ack = ((NetKernel) NetKernel.kernel).connect(host, port);
+        NachosMessage ack = ((NetKernel) NetKernel.kernel).connect(host, port);
         if (null == ack) {
             error("Connect didn't return an ACK");
             return -1;

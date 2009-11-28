@@ -3,7 +3,7 @@ package nachos.network;
 import nachos.machine.Lib;
 import nachos.machine.Machine;
 import nachos.machine.MalformedPacketException;
-import nachos.threads.KThread;
+import nachos.threads.Lock;
 import nachos.vm.VMKernel;
 
 /**
@@ -22,7 +22,8 @@ public class NetKernel extends VMKernel {
      */
     public void initialize(String[] args) {
         super.initialize(args);
-
+        localPort = Byte.MAX_VALUE - 1;
+        portLock = new Lock();
         postOffice = new PostOffice();
         myLinkID = Machine.networkLink().getLinkAddress();
     }
@@ -34,6 +35,7 @@ public class NetKernel extends VMKernel {
      * is 1.0).
      */
     public void selfTest() {
+        NachosMessageTest.selfTest();
     }
 
 
@@ -51,64 +53,64 @@ public class NetKernel extends VMKernel {
         super.terminate();
     }
 
-    public MailMessage accept(int port) {
-        final int localPort = 0;
+    public NachosMessage accept(int port) {
         // grab a pending connection and ACK it
-        MailMessage syn = postOffice.receiveNB(port);
+        //debug("SYN("+port+")?");
+        NachosMessage syn = postOffice.nextSyn(port);
         if (null != syn) {
-            byte[] payload = new byte[0];
-            MailMessage ack;
+            debug("SYN("+port+") := "+syn);
+            NachosMessage ack;
             try {
-                ack = new MailMessage(
-                        syn.packet.srcLink, syn.srcPort,
-                        myLinkID, localPort, payload);
+                ack = NachosMessage.ack(syn);
             } catch (MalformedPacketException e) {
                 Lib.assertNotReached(e.getMessage());
                 return null;
             }
+            debug("ACK("+port+") -> ("+ack.getDestHost()+","+ack.getDestPort()+")");
             postOffice.send(ack);
             // now the connection is established
+            debug("SYN-ACK complete("+port+"); welcome host:"+syn.getSourceHost());
         }
         return syn;
     }
 
-    public MailMessage connect(int host, int port) {
+    public NachosMessage connect(int host, int port) {
         // grab next free local port number
-        final int localPort = 0;
+        final int localPort = nextLocalPort();
         // send a SYN request and then wait for the response
-        byte[] payload = new byte[0];
-        MailMessage syn;
+        NachosMessage syn;
         try {
-            syn = new MailMessage(host, port, myLinkID, localPort, payload);
+            syn = NachosMessage.syn(host, port);
         } catch (MalformedPacketException e) {
             Lib.assertNotReached(e.getMessage());
             return null;
         }
         postOffice.send(syn);
         debug("Waiting on ACK from "+host+":"+port);
-        MailMessage ack = postOffice.receive(localPort);
-        Lib.assertTrue(ack.packet.srcLink == host,
-                "Wrong host! wanted "+host+" but got "+ack.packet.srcLink);
+        NachosMessage ack = postOffice.receive(localPort);
+        Lib.assertTrue(ack.getSourceHost() == host,
+                "Wrong host! wanted "+host+" but got "+ack.getSourceHost());
         return ack;
     }
 
     public int write(int host, int port, int localPort,
                       byte[] data, int offset, int len) {
         final String qualifier = "(" + host + "," + port + "," + myLinkID + "," + localPort + ")";
-        // compose up to MailMessage.maxContentsLength chunk, and tack it
+        // compose up to NachosMessage.MAX_CONTENTS_LENGTH chunk, and tack it
         // into the outgoing queue for the given (host,port) tuple
         int written = 0;
-        for (int i = 0; i < len; i += MailMessage.maxContentsLength) {
-            byte[] contents = new byte[ 0 ];
+        for (int i = 0; i < len; i += NachosMessage.MAX_CONTENTS_LENGTH) {
+            byte[] contents = new byte[ len - offset ];
             System.arraycopy(data, i, contents, 0, contents.length );
-            MailMessage datagram;
+            NachosMessage datagram;
             try {
-                datagram = new MailMessage(host, port, myLinkID, localPort, contents);
+                datagram = new NachosMessage(host, port, myLinkID, localPort, contents);
             } catch (MalformedPacketException e) {
                 error(qualifier+".write := " +e.getMessage());
                 return -1;
             }
             // TX queue.add(datagram)
+            debug("DATA:="+datagram);
             written += contents.length;
         }
         return written;
@@ -116,11 +118,10 @@ public class NetKernel extends VMKernel {
 
     public int close(int host, int port, int localPort) {
         final String qualifier = "(" + host + "," + port + "," + myLinkID + "," + localPort + ")";
-        byte[] contents = new byte[0];
         // send the STP
-        MailMessage stp;
+        NachosMessage stp;
         try {
-            stp = new MailMessage(host, port, myLinkID, localPort, contents);
+            stp = NachosMessage.stp(host, port);
         } catch (MalformedPacketException e) {
             error(qualifier+".close STP := " +e.getMessage());
             return -1;
@@ -129,11 +130,11 @@ public class NetKernel extends VMKernel {
         postOffice.send(stp);
         // wait for the FIN
         debug(qualifier+": awaiting FIN");
-        MailMessage fin = postOffice.receive(localPort);
+        NachosMessage fin = postOffice.receive(localPort);
         // send the FIN-ACK
-        MailMessage finAck;
+        NachosMessage finAck;
         try {
-            finAck = new MailMessage(fin.packet.srcLink, fin.srcPort, myLinkID, localPort, contents);
+            finAck = NachosMessage.newFinAck(fin);
         } catch (MalformedPacketException e) {
             error(qualifier+".close FINACK := "+e.getMessage());
             return -1;
@@ -151,91 +152,25 @@ public class NetKernel extends VMKernel {
         Lib.debug(dbgFlag, msg);
     }
 
+    static int nextLocalPort() {
+        int result;
+        portLock.acquire();
+        result = localPort--;
+        if (0 == localPort) {
+            localPort = Byte.MAX_VALUE - 1;
+        }
+        portLock.release();
+        return result;
+    }
+
 
     private PostOffice postOffice;
+    private static Lock portLock;
+    /**
+     * The local port number assigned to connections.
+     * Guarded by {@link #portLock}.
+     */
+    private static int localPort;
     private int myLinkID;
     private char dbgFlag = 'K';
-
-    private void ping_selfTest() {
-        super.selfTest();
-
-        KThread serverThread = new KThread(new Runnable() {
-            public void run() {
-                pingServer();
-            }
-        });
-
-        serverThread.fork();
-
-        System.out.println("Press any key to start the network test...");
-        console.readByte(true);
-
-        int local = Machine.networkLink().getLinkAddress();
-
-        // ping this machine first
-        ping(local);
-        System.err.println("Self Ping OK");
-
-        // if we're 0 or 1, ping the opposite
-        ping(0 == local ? 1 : 0);
-    }
-
-    /**
-     * Pings always go from port 0 to port 1, and then are reflected back.
-     *
-     * @param dstLink the network link to ping.
-     */
-    private void ping(int dstLink) {
-        final int srcLink = Machine.networkLink().getLinkAddress();
-        final int srcPort = 0;
-        final int dstPort = 1;
-
-        System.out.println("PING " + dstLink + ":" + dstPort
-                + " from " + srcLink + ":" + srcPort);
-
-        long startTime = Machine.timer().getTime();
-
-        MailMessage ping;
-
-        try {
-            ping = new MailMessage(dstLink, dstPort, srcLink, srcPort,
-                    new byte[0]);
-        }
-        catch (MalformedPacketException e) {
-            Lib.assertNotReached();
-            return;
-        }
-
-        System.out.println("Sending PING");
-        postOffice.send(ping);
-        System.out.println("Waiting for ACK");
-        MailMessage ack = postOffice.receive(srcPort);
-        System.out.println("Received ACK from " + ack.packet.srcLink + ":" + ack.srcPort);
-
-        long endTime = Machine.timer().getTime();
-
-        System.out.println("time=" + (endTime - startTime) + " ticks");
-    }
-
-    private void pingServer() {
-        while (true) {
-            System.out.println("Waiting on Ping(:1) ...");
-            MailMessage ping = postOffice.receive(1);
-
-            MailMessage ack;
-
-            try {
-                ack = new MailMessage(ping.packet.srcLink, ping.srcPort,
-                        ping.packet.dstLink, ping.dstPort,
-                        ping.contents);
-            }
-            catch (MalformedPacketException e) {
-                Lib.assertNotReached("should never happen haha");
-                continue;
-            }
-            System.out.println("Sending ACK to " + ack.packet.dstLink + ":" + ack.dstPort);
-            postOffice.send(ack);
-            System.out.println("ACK away");
-        }
-    }
 }
