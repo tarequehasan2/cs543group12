@@ -8,10 +8,9 @@ public class NachosMessage
 {
     public static NachosMessage ack(NachosMessage syn)
             throws MalformedPacketException {
-        final int localPort = NetKernel.nextLocalPort();
         return new NachosMessage(
                 syn.getSourceHost(), syn.getSourcePort(),
-                getLocalLinkId(), localPort,
+                syn.getDestHost(), syn.getDestPort(),
                 ACK, new byte[0]);
     }
 
@@ -23,7 +22,7 @@ public class NachosMessage
      * the provided message.
      * @throws MalformedPacketException if unable to construct said message.
      */
-    public static NachosMessage newFinAck(NachosMessage fin)
+    public static NachosMessage finAck(NachosMessage fin)
             throws MalformedPacketException {
         return new NachosMessage(
                 fin.getSourceHost(), fin.getSourcePort(),
@@ -40,14 +39,6 @@ public class NachosMessage
                 STP, new byte[0]);
     }
 
-    public static NachosMessage pong(NachosMessage ping)
-            throws MalformedPacketException {
-        return new NachosMessage(
-                ping.getSourceHost(), ping.getSourcePort(),
-                ping.getDestHost(), ping.getDestPort(),
-                ping.getPayload());
-    }
-
     public static NachosMessage syn(int dstLink, int dstPort)
             throws MalformedPacketException {
         final int localPort = NetKernel.nextLocalPort();
@@ -55,6 +46,14 @@ public class NachosMessage
                 dstLink, dstPort,
                 getLocalLinkId(), localPort,
                 SYN, new byte[0]);
+    }
+
+    public static NachosMessage pong(NachosMessage ping)
+            throws MalformedPacketException {
+        return new NachosMessage(
+                ping.getSourceHost(), ping.getSourcePort(),
+                ping.getDestHost(), ping.getDestPort(),
+                ping.getPayload());
     }
 
     /** Returns the default source host id for newly created messages. */
@@ -95,6 +94,13 @@ public class NachosMessage
     public NachosMessage(int dstLink, int dstPort, int srcLink, int srcPort,
                          byte flags, byte[] contents)
             throws MalformedPacketException {
+        // the Packet constructor will check the link-ids for us
+        if (dstPort < 0 || dstPort > PORT_LIMIT) {
+            throw new MalformedPacketException();
+        }
+        if (srcPort < 0 || srcPort > PORT_LIMIT) {
+            throw new MalformedPacketException();
+        }
         _dstHost = dstLink;
         _dstPort = dstPort;
         _srcHost = srcLink;
@@ -105,9 +111,10 @@ public class NachosMessage
         pContents[0] = (byte)(dstPort & 0xFF);
         pContents[1] = (byte)(srcPort & 0xFF);
         pContents[2] = (byte)0; // MBZ-HI
-        pContents[3] = (byte)(FIN & flags); // MBZ-LO
-        writeSequence(pContents, 4, _seq);
+        // ensure only our flags appear in MBZ-LO
+        pContents[3] = (byte)((ACK|FIN|STP|SYN) & flags); // MBZ-LO
         initializeFlags(flags);
+        writeSequence(pContents, 4, _seq);
         // load in the data
         System.arraycopy(contents, 0, pContents, HEADER_SIZE, contents.length);
         _packet = new Packet(dstLink, srcLink, pContents);
@@ -135,7 +142,8 @@ public class NachosMessage
             System.err.println("MBZ-HI = "+Integer.toHexString(raw.contents[2]));
             throw new MalformedPacketException();
         }
-        if (0 != ((0xFF - 8) & raw.contents[3])) {
+        if (0 != ( (Byte.MAX_VALUE - (8+4+2+1)) & raw.contents[3])) {
+            System.err.println("NachosMessage:Bogus Flags:="+Integer.toHexString(raw.contents[3]));
             throw new MalformedPacketException();
         }
         initializeFlags(raw.contents[3]);

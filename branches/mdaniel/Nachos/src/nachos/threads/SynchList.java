@@ -56,6 +56,8 @@ public class SynchList {
 	lock.acquire();
 	if (list.isEmpty()) {
         lock.release();
+        // slow down so `while (1){accept()}` doesn't completely swamp CPU
+        KThread.yield();
 	    return null;
     }
 	o = list.removeFirst();

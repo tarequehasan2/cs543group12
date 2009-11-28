@@ -31,7 +31,7 @@ public class NachosMessageTest
                 dPort,
                 sPort,
                 0, // MBZ-HI
-                0, // MBZ-LO
+                NachosMessage.SYN, // MBZ-LO
                 (byte)((seq >> 24) & 0xFF),
                 (byte)((seq >> 16) & 0xFF),
                 (byte)((seq >>  8) & 0xFF),
@@ -70,7 +70,7 @@ public class NachosMessageTest
         assertTrue( !m.isACK(), "ACK?!");
         assertTrue( !m.isFIN(), "FIN?!");
         assertTrue( !m.isSTP(), "ATP?!");
-        assertTrue( !m.isSYN(), "SYN?!");
+        assertTrue(  m.isSYN(), "No SYN?!");
         assertTrue(seq == m.getSequence(), "Wrong sequence");
         final byte[] payload = m.getPayload();
         assertTrue( payload.length == 4, "wrong payload size");

@@ -75,8 +75,6 @@ public class NetKernel extends VMKernel {
     }
 
     public NachosMessage connect(int host, int port) {
-        // grab next free local port number
-        final int localPort = nextLocalPort();
         // send a SYN request and then wait for the response
         NachosMessage syn;
         try {
@@ -86,8 +84,8 @@ public class NetKernel extends VMKernel {
             return null;
         }
         postOffice.send(syn);
-        debug("Waiting on ACK from "+host+":"+port);
-        NachosMessage ack = postOffice.receive(localPort);
+        debug("Waiting on ACK from "+host+":"+port+" on "+syn.getSourcePort());
+        NachosMessage ack = postOffice.receive(syn.getSourcePort());
         Lib.assertTrue(ack.getSourceHost() == host,
                 "Wrong host! wanted "+host+" but got "+ack.getSourceHost());
         return ack;
@@ -134,7 +132,7 @@ public class NetKernel extends VMKernel {
         // send the FIN-ACK
         NachosMessage finAck;
         try {
-            finAck = NachosMessage.newFinAck(fin);
+            finAck = NachosMessage.finAck(fin);
         } catch (MalformedPacketException e) {
             error(qualifier+".close FINACK := "+e.getMessage());
             return -1;
@@ -152,6 +150,7 @@ public class NetKernel extends VMKernel {
         Lib.debug(dbgFlag, msg);
     }
 
+    /** Returns the next theoretically available local port. */
     static int nextLocalPort() {
         int result;
         portLock.acquire();

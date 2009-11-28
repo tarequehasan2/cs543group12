@@ -3,6 +3,7 @@ package nachos.network;
 import nachos.machine.Lib;
 import nachos.machine.Machine;
 import nachos.machine.MalformedPacketException;
+import nachos.machine.NetworkLink;
 import nachos.machine.Packet;
 import nachos.threads.KThread;
 import nachos.threads.Lock;
@@ -74,11 +75,11 @@ public class PostOffice {
     public NachosMessage receive(int port) {
         Lib.assertTrue(port >= 0 && port < dataQueues.length);
 
-        Lib.debug(dbgNet, "waiting for mail on port " + port);
+        debug("waiting for mail on port " + port);
 
         NachosMessage mail = (NachosMessage) dataQueues[port].removeFirst();
 
-        Lib.debug(dbgNet, "got mail on port " + port + ": " + mail);
+        debug("got mail on port " + port + ": " + mail);
 
         return mail;
     }
@@ -86,11 +87,13 @@ public class PostOffice {
     public NachosMessage nextSyn(int port) {
         Lib.assertTrue(port >= 0 && port < synQueues.length);
 
-        Lib.debug(dbgNet, "waiting for SYN on port " + port);
+        // debug("waiting for SYN on port " + port);
 
-        NachosMessage mail = (NachosMessage) synQueues[port].removeFirst();
-
-        Lib.debug(dbgNet, "got mail on port " + port + ": " + mail);
+        NachosMessage mail = (NachosMessage)
+                synQueues[port].removeFirstWithoutBlocking();
+        if (null != mail) {
+            debug("got SYN on port " + port + ": " + mail);
+        }
 
         return mail;
     }
@@ -112,14 +115,13 @@ public class PostOffice {
                 continue;
             }
 
-
             // atomically add message to the mailbox and wake a waiting thread
             if (mail.isSYN()) {
-                Lib.debug(dbgNet, "delivering SYN on port " + mail.getDestPort()
+                debug("delivering SYN on port " + mail.getDestPort()
                             + ": " + mail);
                 synQueues[mail.getDestPort()].add(mail);
             } else {
-                Lib.debug(dbgNet, "delivering mail to port " + mail.getDestPort()
+                debug("delivering mail to port " + mail.getDestPort()
                             + ": " + mail);
                 dataQueues[mail.getDestPort()].add(mail);
             }
@@ -138,7 +140,7 @@ public class PostOffice {
      * Send a message to a mailbox on a remote machine.
      */
     public void send(NachosMessage mail) {
-        Lib.debug(dbgNet, "sending mail: " + mail);
+        debug("sending mail: " + mail);
 
         sendLock.acquire();
 
@@ -155,6 +157,10 @@ public class PostOffice {
      */
     private void sendInterrupt() {
         messageSent.V();
+    }
+
+    private void debug(String msg) {
+        Lib.debug(dbgNet, "DEBUG:"+NetworkLink.networkID+"::"+msg);
     }
 
     private SynchList[] dataQueues;
