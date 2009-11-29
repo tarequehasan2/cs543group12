@@ -1,6 +1,7 @@
 package nachos.vm;
 
 import nachos.machine.Machine;
+import nachos.machine.NetworkLink;
 import nachos.machine.Processor;
 import nachos.machine.TranslationEntry;
 
@@ -43,5 +44,11 @@ class LiveMachine implements IMachine
         Machine.processor().writeTLBEntry(i, entry);
     }
 
+	@Override
+	public NetworkLink getNetworkLink() {
+		return Machine.networkLink();
+	}
+
     private static final LiveMachine self = new LiveMachine();
+
 }
