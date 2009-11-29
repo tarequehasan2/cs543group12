@@ -51,9 +51,19 @@ public class NetProcess extends VMProcess {
             // we don't know if it didn't shake or error, but either way ...
             return -1;
         }
-        fileDescriptors[numOpenFiles + 1] = new SocketOpenFile(syn);
-        numOpenFiles++;
-        return numOpenFiles;
+        if (numOpenFiles < maxNumFiles){
+        	int fd = 0;
+        	for (int i=0; i<fileDescriptors.length; i++){
+        		if (fileDescriptors[fd] == null){
+        			fileDescriptors[fd] = new SocketOpenFile(syn);
+        			numOpenFiles++;
+        			return fd;
+        		}else{
+        			fd++;
+        		}
+        	}
+        }
+        return -1;
     }
 
     protected int handleConnect(int host, int port) {
@@ -63,9 +73,19 @@ public class NetProcess extends VMProcess {
             error("Connect didn't return an ACK");
             return -1;
         }
-        fileDescriptors[numOpenFiles + 1] = new SocketOpenFile(ack);
-        numOpenFiles++;
-        return numOpenFiles;
+        if (numOpenFiles < maxNumFiles){
+        	int fd = 0;
+        	for (int i=0; i<fileDescriptors.length; i++){
+        		if (fileDescriptors[fd] == null){
+        			fileDescriptors[fd] = new SocketOpenFile(ack);
+        			numOpenFiles++;
+        			return fd;
+        		}else{
+        			fd++;
+        		}
+        	}
+        }
+        return -1;
     }
 
     private void error(String msg) {
