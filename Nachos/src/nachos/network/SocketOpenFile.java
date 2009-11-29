@@ -1,6 +1,7 @@
 package nachos.network;
 
 import nachos.machine.OpenFile;
+import nachos.threads.KThread;
 
 public class SocketOpenFile extends OpenFile
 {
@@ -11,8 +12,7 @@ public class SocketOpenFile extends OpenFile
 
     @Override
     public void close() {
-        closeErrno = ((NetKernel)NetKernel.kernel)
-                .close(_msg.getSourceHost(), _msg.getSourcePort(), _msg.getDestPort());
+    	new KThread(new SocketFinisher((NetKernel)NetKernel.kernel,_msg.getSourceHost(), _msg.getSourcePort(), _msg.getDestPort())).fork();
     }
 
     @Override
