@@ -3,6 +3,7 @@ package nachos.network;
 import nachos.machine.Lib;
 import nachos.machine.Machine;
 import nachos.machine.MalformedPacketException;
+import nachos.threads.KThread;
 import nachos.threads.Lock;
 import nachos.vm.VMKernel;
 
@@ -26,6 +27,8 @@ public class NetKernel extends VMKernel {
         portLock = new Lock();
         postOffice = new PostOffice();
         myLinkID = Machine.networkLink().getLinkAddress();
+        postOfficeSender = new PostOfficeSender(postOffice);
+        new KThread(postOfficeSender).fork();
     }
 
     /**
@@ -50,7 +53,9 @@ public class NetKernel extends VMKernel {
      * Terminate this kernel. Never returns.
      */
     public void terminate() {
+    	PostOfficeSender.terminate();
         super.terminate();
+        
     }
 
     public NachosMessage accept(int port) {
@@ -67,7 +72,7 @@ public class NetKernel extends VMKernel {
                 return null;
             }
             debug("ACK("+port+") -> ("+ack.getDestHost()+","+ack.getDestPort()+")");
-            postOffice.send(ack);
+            postOfficeSender.send(ack);
             // now the connection is established
             debug("SYN-ACK complete("+port+"); welcome host:"+syn.getSourceHost());
         }
@@ -83,7 +88,7 @@ public class NetKernel extends VMKernel {
             Lib.assertNotReached(e.getMessage());
             return null;
         }
-        postOffice.send(syn);
+        postOfficeSender.send(syn);
         debug("Waiting on ACK from "+host+":"+port+" on "+syn.getSourcePort());
         NachosMessage ack = postOffice.receive(syn.getSourcePort());
         Lib.assertTrue(ack.getSourceHost() == host,
@@ -107,6 +112,7 @@ public class NetKernel extends VMKernel {
                 error(qualifier+".write := " +e.getMessage());
                 return -1;
             }
+            postOfficeSender.send(datagram);
             // TX queue.add(datagram)
             debug("DATA:="+datagram);
             written += contents.length;
@@ -125,7 +131,7 @@ public class NetKernel extends VMKernel {
             return -1;
         }
         debug(qualifier+":STP := "+stp);
-        postOffice.send(stp);
+        postOfficeSender.send(stp);
         // wait for the FIN
         debug(qualifier+": awaiting FIN");
         NachosMessage fin = postOffice.receive(localPort);
@@ -138,7 +144,7 @@ public class NetKernel extends VMKernel {
             return -1;
         }
         debug(qualifier+":FINACK := "+finAck);
-        postOffice.send(finAck);
+        postOfficeSender.send(finAck);
         return 0;
     }
 
@@ -165,6 +171,8 @@ public class NetKernel extends VMKernel {
 
     private PostOffice postOffice;
     private static Lock portLock;
+    private PostOfficeSender postOfficeSender;
+    
     /**
      * The local port number assigned to connections.
      * Guarded by {@link #portLock}.
