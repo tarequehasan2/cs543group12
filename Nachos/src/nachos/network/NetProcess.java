@@ -59,7 +59,6 @@ public class NetProcess extends VMProcess {
         	for (int i=0; i<fileDescriptors.length; i++){
         		if (fileDescriptors[fd] == null){
         			fileDescriptors[fd] = new SocketOpenFile(syn);
-        			sockets.put(new SocketKey(syn), (SocketOpenFile)fileDescriptors[fd]);
         			numOpenFiles++;
         			return fd;
         		}else{
@@ -82,7 +81,6 @@ public class NetProcess extends VMProcess {
         	for (int i=0; i<fileDescriptors.length; i++){
         		if (fileDescriptors[fd] == null){
         			fileDescriptors[fd] = new SocketOpenFile(ack);
-        			sockets.put(new SocketKey(ack), (SocketOpenFile)fileDescriptors[fd]);
         			numOpenFiles++;
         			return fd;
         		}else{

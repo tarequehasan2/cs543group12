@@ -1,8 +1,8 @@
 package nachos.network;
 
 import nachos.machine.Lib;
-import nachos.machine.Machine;
 import nachos.machine.MalformedPacketException;
+import nachos.threads.Condition;
 import nachos.threads.KThread;
 import nachos.threads.Lock;
 import nachos.vm.VMKernel;
@@ -23,10 +23,7 @@ public class NetKernel extends VMKernel {
      */
     public void initialize(String[] args) {
         super.initialize(args);
-        localPort = Byte.MAX_VALUE - 1;
-        portLock = new Lock();
         postOffice = new PostOffice();
-        myLinkID = Machine.networkLink().getLinkAddress();
         postOfficeSender = new PostOfficeSender(postOffice);
         new KThread(postOfficeSender).fork();
     }
@@ -55,9 +52,16 @@ public class NetKernel extends VMKernel {
     public void terminate() {
     	PostOfficeSender.terminate();
         super.terminate();
-        
+
     }
 
+    /**
+     * Grab the next SYN packet from the receive queue,
+     * send a SYN/ACK and return the SYN which shows the remote host, remote
+     * port, local host, local port and SEQ.
+     * @param port the port in the legal range to check for connections.
+     * @return the SYN message showing all relevant endpoint information.
+     */
     public NachosMessage accept(int port) {
         // grab a pending connection and ACK it
         //debug("SYN("+port+")?");
@@ -79,26 +83,64 @@ public class NetKernel extends VMKernel {
         return syn;
     }
 
-    public NachosMessage connect(int host, int port) {
-        // send a SYN request and then wait for the response
-        NachosMessage syn;
-        try {
-            syn = NachosMessage.syn(host, port);
-        } catch (MalformedPacketException e) {
-            Lib.assertNotReached(e.getMessage());
-            return null;
-        }
-        postOfficeSender.send(syn);
-        debug("Waiting on ACK from "+host+":"+port+" on "+syn.getSourcePort());
-        NachosMessage ack = postOffice.receive(syn.getSourcePort());
-        Lib.assertTrue(ack.getSourceHost() == host,
-                "Wrong host! wanted "+host+" but got "+ack.getSourceHost());
-        return ack;
+    /** Allows the system to ack a specific sequence number. */
+    public void reportAck(int seq) {
+        postOfficeSender.ackMessage(seq);
     }
 
-    public int write(int host, int port, int localPort,
+    public void wakeConnect(NachosMessage synAck) {
+        SocketKey key = new SocketKey(
+                synAck.getDestHost(), synAck.getDestPort(), -1, -1);
+        final Condition cond = connectConds.get(key);
+        final Lock lock = condLocks.get(cond);
+        lock.acquire();
+        cond.wake();
+        lock.release();
+    }
+
+    public void scheduleClose(SocketOpenFile sock) {
+    }
+
+    private java.util.Map<Condition, Lock> condLocks;
+    private java.util.Map<SocketKey, Condition> connectConds;
+    /**
+     * Send a SYN packet and await the SYN/ACK showing the connection is wired up.
+     * The protocol spec says this should wait on a Condition.
+     * @param host host id
+     * @param port port
+     * @return the message containing all the info
+     */
+    public NachosMessage connect(int host, int port) {
+        Lock l = new Lock();
+        Condition cond = new Condition(l);
+        condLocks.put(cond, l);
+        connectConds.put(new SocketKey(host, port, -1, -1), cond);
+        l.acquire();
+        cond.sleep();
+        l.release();
+        return null;
+    }
+
+    /**
+     * Pull a DATA packet out of the receive queue, or 0 if empty, or -1 on error.
+     * @param msg the socket's syn message for which we are reading
+     * @param data the buffer into which we put data
+     * @param offset but not below this offset
+     * @param len but not exceeding this length
+     * @return the bytes read
+     */
+    public int read(NachosMessage msg,
                       byte[] data, int offset, int len) {
-        final String qualifier = "(" + host + "," + port + "," + myLinkID + "," + localPort + ")";
+        return -1;
+    }
+    public int write(NachosMessage msg,
+                      byte[] data, int offset, int len) {
+        final int destHost = msg.getDestHost();
+        final int destPort = msg.getDestPort();
+        final int srcPort = msg.getSourcePort();
+        final int srcHost = msg.getSourceHost();
+        final String qualifier = "(" + destHost + "," + destPort
+                + "," + srcHost + "," + srcPort + ")";
         // compose up to NachosMessage.MAX_CONTENTS_LENGTH chunk, and tack it
         // into the outgoing queue for the given (host,port) tuple
         int written = 0;
@@ -107,45 +149,17 @@ public class NetKernel extends VMKernel {
             System.arraycopy(data, i, contents, 0, contents.length );
             NachosMessage datagram;
             try {
-                datagram = new NachosMessage(host, port, myLinkID, localPort, contents);
+                datagram = new NachosMessage(destHost, destPort, srcHost, srcPort,
+                        contents);
             } catch (MalformedPacketException e) {
                 error(qualifier+".write := " +e.getMessage());
                 return -1;
             }
-            postOfficeSender.send(datagram);
-            // TX queue.add(datagram)
             debug("DATA:="+datagram);
+            postOfficeSender.send(datagram);
             written += contents.length;
         }
         return written;
-    }
-
-    public int close(int host, int port, int localPort) {
-        final String qualifier = "(" + host + "," + port + "," + myLinkID + "," + localPort + ")";
-        // send the STP
-        NachosMessage stp;
-        try {
-            stp = NachosMessage.stp(host, port);
-        } catch (MalformedPacketException e) {
-            error(qualifier+".close STP := " +e.getMessage());
-            return -1;
-        }
-        debug(qualifier+":STP := "+stp);
-        postOfficeSender.send(stp);
-        // wait for the FIN
-        debug(qualifier+": awaiting FIN");
-        NachosMessage fin = postOffice.receive(localPort);
-        // send the FIN-ACK
-        NachosMessage finAck;
-        try {
-            finAck = NachosMessage.finAck(fin);
-        } catch (MalformedPacketException e) {
-            error(qualifier+".close FINACK := "+e.getMessage());
-            return -1;
-        }
-        debug(qualifier+":FINACK := "+finAck);
-        postOfficeSender.send(finAck);
-        return 0;
     }
 
     private void error(String msg) {
@@ -156,28 +170,7 @@ public class NetKernel extends VMKernel {
         Lib.debug(dbgFlag, msg);
     }
 
-    /** Returns the next theoretically available local port. */
-    static int nextLocalPort() {
-        int result;
-        portLock.acquire();
-        result = localPort--;
-        if (0 == localPort) {
-            localPort = Byte.MAX_VALUE - 1;
-        }
-        portLock.release();
-        return result;
-    }
-
-
     private PostOffice postOffice;
-    private static Lock portLock;
     private PostOfficeSender postOfficeSender;
-    
-    /**
-     * The local port number assigned to connections.
-     * Guarded by {@link #portLock}.
-     */
-    private static int localPort;
-    private int myLinkID;
     private char dbgFlag = 'K';
 }

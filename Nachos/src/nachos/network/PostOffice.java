@@ -29,6 +29,7 @@ public class PostOffice {
      * "postal worker" thread.
      */
     public PostOffice() {
+        _kernel = (NetKernel) NetKernel.kernel;
         messageReceived = new Semaphore(0);
         messageSent = new Semaphore(0);
         sendLock = new Lock();
@@ -81,7 +82,7 @@ public class PostOffice {
 
         SocketEvent event = SocketEvent.getEvent(mail);
         SocketOpenFile socket = NetProcess.sockets.get(new SocketKey(mail));
-        
+
       try {
 		SocketTransition.doEvent(socket, event );
 	} catch (FailSyscall e) {
@@ -94,7 +95,7 @@ public class PostOffice {
 		// TODO Auto-generated catch block
 		e.printStackTrace();
 	}
-        
+
         debug("got mail on port " + port + ": " + mail);
 
         return mail;
@@ -116,6 +117,17 @@ public class PostOffice {
 
     /**
      * Wait for incoming messages, and then put them in the correct mailbox.
+     * Notify the ProtocolStateMachine for the specific Socket.
+     * <hr/>
+     * <ol>
+     * <li> If it's a DATA, put it in the mailbox for the incoming port.
+     * <li> If it's a SYN packet, put in it in the SYN queue
+     * <li> If it's a SYN-ACK packet, transition the socket to ESTABLISHED and wake the connect Condition.
+     * <li> If it's a ACK packet, find the SEQ in the POSender
+     * <li> If it's a STP packet, inform the Socket no more writes
+     * <li> If it's a FIN packet, reply with fin-ack
+     * <li> If it's a FIN-ACK packet, notify it's actually closed and can be dealloced
+     * </ol>
      */
     private void postalDelivery() {
         while (true) {
@@ -123,23 +135,53 @@ public class PostOffice {
 
             Packet p = Machine.networkLink().receive();
 
-            NachosMessage mail;
+            NachosMessage msg;
             try {
-                mail = new NachosMessage(p);
+                msg = new NachosMessage(p);
             } catch (MalformedPacketException e) {
                 e.printStackTrace(System.err);
                 continue;
             }
+            // 1.
+            if (! (msg.isData())) {
+                debug("delivering mail to port " + msg.getDestPort()
+                            + ": " + msg);
+                dataQueues[msg.getDestPort()].add(msg);
+                continue;
+            } else
+            // 2.
+            if (msg.isSYN() && !msg.isACK()) {
+                debug("delivering SYN on port " + msg.getDestPort()
+                            + ": " + msg);
+                synQueues[msg.getDestPort()].add(msg);
+                continue;
+            } else
+            // 3.
+            if (msg.isSYN() && msg.isACK()) {
 
-            // atomically add message to the mailbox and wake a waiting thread
-            if (mail.isSYN()) {
-                debug("delivering SYN on port " + mail.getDestPort()
-                            + ": " + mail);
-                synQueues[mail.getDestPort()].add(mail);
+                psm.getMachine(new SocketKey(msg))
+                        .onSYNACK();
+                _kernel.wakeConnect(msg);
+                continue;
+            }
+            // 4.
+            if (msg.isACK()) {
+                _kernel.reportAck(msg.getSequence());
+                continue;
+            } else
+            // 5.
+            if (msg.isSTP()) {
+                continue;
+            } else
+            // 6.
+            if (msg.isFIN() && !msg.isACK()) {
+                continue;
+            } else
+            // 7.
+            if (msg.isFIN() && msg.isACK()) {
+                continue;
             } else {
-                debug("delivering mail to port " + mail.getDestPort()
-                            + ": " + mail);
-                dataQueues[mail.getDestPort()].add(mail);
+                error("Unknown PostOffice situation!");
             }
         }
     }
@@ -175,6 +217,10 @@ public class PostOffice {
         messageSent.V();
     }
 
+    private void error(String msg) {
+        System.err.println("ERROR:"+NetworkLink.networkID+"::"+msg);
+    }
+
     private void debug(String msg) {
         Lib.debug(dbgNet, "DEBUG:"+NetworkLink.networkID+"::"+msg);
         System.out.println("DEBUG:"+NetworkLink.networkID+"::"+msg);
@@ -185,6 +231,8 @@ public class PostOffice {
     private Semaphore messageReceived;    // V'd when a message can be dequeued
     private Semaphore messageSent;    // V'd when a message can be queued
     private Lock sendLock;
-
+    private ProtocolStateMachine psm;
+    /** Convenience variable instead of casting all the time. */
+    private NetKernel _kernel;
     private static final char dbgNet = 'n';
 }
