@@ -10,7 +10,7 @@ public class SocketFinisher implements Runnable {
 	SocketFinisher(NetKernel netKernel, int sourceHost, int sourcePort, int destPort){
 		this.netKernel = netKernel;
 		this.destPort = destPort;
-		this.sourceHost = sourcePort;
+		this.sourceHost = sourceHost;
 		this.sourcePort = sourcePort;
 	}
 	
