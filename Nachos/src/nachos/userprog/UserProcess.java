@@ -1119,7 +1119,7 @@ public class UserProcess {
 	private int waitingToJoin;
     private static final int pageSize = Processor.pageSize;
     private static final char dbgProcess = 'a';
-    private static final int maxNumFiles = 16;
+    protected static final int maxNumFiles = 16;
     /**
      * Maintains the global PID counter,
      * which is protected by <tt>mutex</tt>.
