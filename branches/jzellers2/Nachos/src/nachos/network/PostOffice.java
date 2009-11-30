@@ -166,7 +166,7 @@ public class PostOffice {
             }
             // 4.
             if (msg.isACK()) {
-                _kernel.reportAck(msg.getSequence());
+                _kernel.reportAck(msg);
                 continue;
             } else
             // 5.

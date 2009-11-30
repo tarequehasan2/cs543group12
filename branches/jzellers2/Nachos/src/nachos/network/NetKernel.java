@@ -84,8 +84,8 @@ public class NetKernel extends VMKernel {
     }
 
     /** Allows the system to ack a specific sequence number. */
-    public void reportAck(int seq) {
-        postOfficeSender.ackMessage(seq);
+    public void reportAck(NachosMessage message) {
+        postOfficeSender.ackMessage(message);
     }
 
     public void wakeConnect(NachosMessage synAck) {
