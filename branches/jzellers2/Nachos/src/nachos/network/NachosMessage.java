@@ -6,12 +6,14 @@ import nachos.machine.Packet;
 
 public class NachosMessage
 {
-    public static NachosMessage ack(NachosMessage syn)
+    public static NachosMessage ack(NachosMessage msg)
             throws MalformedPacketException {
-        return new NachosMessage(
-                syn.getSourceHost(), syn.getSourcePort(),
-                syn.getDestHost(), syn.getDestPort(),
+        NachosMessage result = new NachosMessage(
+                msg.getSourceHost(), msg.getSourcePort(),
+                msg.getDestHost(), msg.getDestPort(),
                 ACK, new byte[0]);
+        result._seq = msg._seq;
+        return result;
     }
 
     /**
@@ -22,29 +24,48 @@ public class NachosMessage
      * the provided message.
      * @throws MalformedPacketException if unable to construct said message.
      */
-    public static NachosMessage finAck(NachosMessage fin)
+    public static NachosMessage ackFin(NachosMessage fin)
             throws MalformedPacketException {
-        return new NachosMessage(
+        NachosMessage result = new NachosMessage(
                 fin.getSourceHost(), fin.getSourcePort(),
                 fin.getDestHost(), fin.getDestPort(),
                 (byte)(FIN | ACK),
                 new byte[0]);
+        result._seq = fin._seq;
+        return result;
     }
 
-    public static NachosMessage stp(int host, int port)
+    /**
+     * Creates a Nachos Message suitable for reporting FIN/ACK
+     * to the provided FIN message.
+     * @param syn The FIN message to which we are replying.
+     * @return a newly constructed Nachos Message suitable for replying to
+     * the provided message.
+     * @throws MalformedPacketException if unable to construct said message.
+     */
+    public static NachosMessage ackSyn(NachosMessage syn)
             throws MalformedPacketException {
-        final int localPort = NetKernel.nextLocalPort();
+        NachosMessage result = new NachosMessage(
+                syn.getSourceHost(), syn.getSourcePort(),
+                syn.getDestHost(), syn.getDestPort(),
+                (byte)(SYN | ACK),
+                new byte[0]);
+        result._seq = syn._seq;
+        return result;
+    }
+
+    public static NachosMessage stp(int host, int port, int srcHost, int srcPort)
+            throws MalformedPacketException {
         return new NachosMessage(host, port,
-                getLocalLinkId(), localPort,
+                srcHost, srcPort,
                 STP, new byte[0]);
     }
 
-    public static NachosMessage syn(int dstLink, int dstPort)
+    public static NachosMessage syn(int dstLink, int dstPort, int srcHost, int srcPort)
             throws MalformedPacketException {
-        final int localPort = NetKernel.nextLocalPort();
         return new NachosMessage(
                 dstLink, dstPort,
-                getLocalLinkId(), localPort,
+                srcHost, srcPort,
                 SYN, new byte[0]);
     }
 
@@ -56,9 +77,9 @@ public class NachosMessage
                 ping.getPayload());
     }
 
-    /** Returns the default source host id for newly created messages. */
-    private static int getLocalLinkId() {
-        return Machine.networkLink().getLinkAddress();
+    /** Returns true iff this message has no control flags set. */
+    public boolean isData() {
+        return !( _ack || _fin || _stp || _syn );
     }
 
     /** Indicates the number of bytes required for our header. */
@@ -68,7 +89,7 @@ public class NachosMessage
     public static final int MAX_CONTENTS_LENGTH =
 	    Packet.maxContentsLength - HEADER_SIZE;
     /** The upper bound on the value of any source or destination port. */
-    public static final int PORT_LIMIT = 0xFF - 1;
+    public static final int PORT_LIMIT = Byte.MAX_VALUE;
 
     public static final byte SYN = 1;
     public static final byte ACK = 2;
@@ -91,7 +112,7 @@ public class NachosMessage
                 (null == contents ? new byte[0] : contents));
     }
 
-    public NachosMessage(int dstLink, int dstPort, int srcLink, int srcPort,
+    private NachosMessage(int dstLink, int dstPort, int srcLink, int srcPort,
                          byte flags, byte[] contents)
             throws MalformedPacketException {
         // the Packet constructor will check the link-ids for us

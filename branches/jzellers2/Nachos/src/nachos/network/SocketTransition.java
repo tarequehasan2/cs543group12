@@ -4,9 +4,10 @@ import static nachos.network.SocketState.*;
 import static nachos.network.SocketEvent.*;
 
 public final class SocketTransition {
-	
-	public static void doEvent(SocketOpenFile socket, SocketEvent event) throws FailSyscall, ProtocolError, ProtocolDeadlock{
-		
+
+	public static void doEvent(SocketOpenFile socket, SocketEvent event)
+            throws FailSyscall, ProtocolError, ProtocolDeadlock{
+
 		if (socket == null){
 			return;  // Connection not yet established.
 		}
@@ -32,9 +33,9 @@ public final class SocketTransition {
 		case CLOSING:
 			doClosing(socket, event);
 			break;
-		
+
 		}
-		
+
 	}
 
 	private static void doClosing(SocketOpenFile socket, SocketEvent event) throws FailSyscall, ProtocolError {
@@ -203,7 +204,7 @@ public final class SocketTransition {
 		default:
 			throw new ProtocolError();
 		}
-		
+
 	}
 
 	private static void doClosed(SocketOpenFile socket, SocketEvent event) throws FailSyscall, ProtocolError {
@@ -230,7 +231,7 @@ public final class SocketTransition {
 		case STP:
 		default:
 			throw new ProtocolError();
-		
+
 		}
 	}
 

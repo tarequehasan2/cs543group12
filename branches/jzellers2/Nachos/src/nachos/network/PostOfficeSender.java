@@ -11,18 +11,7 @@ public class PostOfficeSender implements Runnable {
 	PostOfficeSender(PostOffice postOffice){
 		this.postOffice = postOffice;
 	}
-	private LinkedList<NachosMessage> messages = new LinkedList<NachosMessage>();
-	
-	private final int SEND_WINDOW = 16;
-	
-	private List<NachosMessage> unackedMessages = new LinkedList<NachosMessage>();
-	
-	private Lock sendLock = new Lock(); 
-	
-	private PostOffice postOffice = null;
-	
-	private static boolean running = true; // set this to false in terminate.
-	
+
 	@Override
 	public void run() {
 		while (running){
@@ -37,21 +26,21 @@ public class PostOfficeSender implements Runnable {
 		}
 
 	}
-	
+
 	public void send(NachosMessage message){
 		sendLock.acquire();
-		messages.addLast(message);
+		messages.add(message);
 		sendLock.release();
 	}
-	
-	public void resendAll(){
-		sendLock.acquire();
-		for (NachosMessage message : unackedMessages){
-			postOffice.send(message);
-		}
-		sendLock.release();
-	}
-	
+
+//	public void resendAll(){
+//		sendLock.acquire();
+//		for (NachosMessage message : unackedMessages){
+//			postOffice.send(message);
+//		}
+//		sendLock.release();
+//	}
+
 	public void ackMessage(int seqNum){
 		sendLock.acquire();
 		for (NachosMessage message : unackedMessages){
@@ -61,9 +50,15 @@ public class PostOfficeSender implements Runnable {
 		}
 		sendLock.release();
 	}
-	
+
 	public static void terminate(){
 		running = false;
 	}
 
+    private static boolean running = true; // set this to false in terminate.
+    private final int SEND_WINDOW = 16;
+    private LinkedList<NachosMessage> messages = new LinkedList<NachosMessage>();
+    private List<NachosMessage> unackedMessages = new LinkedList<NachosMessage>();
+    private Lock sendLock = new Lock();
+    private PostOffice postOffice;
 }
