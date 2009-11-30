@@ -79,6 +79,22 @@ public class PostOffice {
 
         NachosMessage mail = (NachosMessage) dataQueues[port].removeFirst();
 
+        SocketEvent event = SocketEvent.getEvent(mail);
+        SocketOpenFile socket = NetProcess.sockets.get(new SocketKey(mail));
+        
+      try {
+		SocketTransition.doEvent(socket, event );
+	} catch (FailSyscall e) {
+		// TODO Auto-generated catch block
+		e.printStackTrace();
+	} catch (ProtocolError e) {
+		// TODO Auto-generated catch block
+		e.printStackTrace();
+	} catch (ProtocolDeadlock e) {
+		// TODO Auto-generated catch block
+		e.printStackTrace();
+	}
+        
         debug("got mail on port " + port + ": " + mail);
 
         return mail;
@@ -161,6 +177,7 @@ public class PostOffice {
 
     private void debug(String msg) {
         Lib.debug(dbgNet, "DEBUG:"+NetworkLink.networkID+"::"+msg);
+        System.out.println("DEBUG:"+NetworkLink.networkID+"::"+msg);
     }
 
     private SynchList[] dataQueues;

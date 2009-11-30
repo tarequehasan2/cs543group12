@@ -1,5 +1,8 @@
 package nachos.network;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import nachos.machine.Lib;
 import nachos.vm.VMProcess;
 
@@ -56,6 +59,7 @@ public class NetProcess extends VMProcess {
         	for (int i=0; i<fileDescriptors.length; i++){
         		if (fileDescriptors[fd] == null){
         			fileDescriptors[fd] = new SocketOpenFile(syn);
+        			sockets.put(new SocketKey(syn), (SocketOpenFile)fileDescriptors[fd]);
         			numOpenFiles++;
         			return fd;
         		}else{
@@ -78,6 +82,7 @@ public class NetProcess extends VMProcess {
         	for (int i=0; i<fileDescriptors.length; i++){
         		if (fileDescriptors[fd] == null){
         			fileDescriptors[fd] = new SocketOpenFile(ack);
+        			sockets.put(new SocketKey(ack), (SocketOpenFile)fileDescriptors[fd]);
         			numOpenFiles++;
         			return fd;
         		}else{
@@ -96,5 +101,6 @@ public class NetProcess extends VMProcess {
         Lib.debug(dbgFlag, "DEBUG:" + this + "::" + msg);
     }
 
+    protected static Map<SocketKey, SocketOpenFile> sockets = new HashMap<SocketKey, SocketOpenFile>();
     private char dbgFlag = 'P';
 }

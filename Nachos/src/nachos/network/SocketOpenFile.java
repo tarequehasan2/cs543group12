@@ -2,6 +2,7 @@ package nachos.network;
 
 import nachos.machine.OpenFile;
 import nachos.threads.KThread;
+import static nachos.network.SocketState.*;
 
 public class SocketOpenFile extends OpenFile
 {
@@ -51,6 +52,16 @@ public class SocketOpenFile extends OpenFile
     public void seek(int pos) {
     }
 
+    public void setState(SocketState state){
+    	this.state = state;
+    }
+    
+    public SocketState getState(){
+    	return this.state;
+    }
+    
+    private SocketState state = CLOSED;
     private NachosMessage _msg;
     int closeErrno;
+
 }
