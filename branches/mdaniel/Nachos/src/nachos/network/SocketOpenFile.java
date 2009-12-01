@@ -4,10 +4,9 @@ import nachos.machine.OpenFile;
 
 public class SocketOpenFile extends OpenFile
 {
-    public SocketOpenFile(NachosMessage msg) {
+    public SocketOpenFile(SocketKey key) {
         super();
-        _msg = msg;
-        _state = SocketState.ESTABLISHED;
+        _key = key;
         _kernel = (NetKernel) NetKernel.kernel;
     }
 
@@ -31,7 +30,7 @@ public class SocketOpenFile extends OpenFile
      */
     @Override
     public int read(byte[] buf, int offset, int length) {
-        return _kernel.read(_msg, buf, offset, length);
+        return _kernel.read(_key, buf, offset, length);
     }
 
     /**
@@ -46,7 +45,7 @@ public class SocketOpenFile extends OpenFile
      */
     @Override
     public int write(byte[] buf, int offset, int length) {
-        return _kernel.write(_msg, buf, offset, length);
+        return _kernel.write(_key, buf, offset, length);
     }
 
     /** Always returns -1, because I do not support seeked reads. */
@@ -78,17 +77,15 @@ public class SocketOpenFile extends OpenFile
     public void seek(int pos) {
     }
 
-    SocketState getState() {
-        return _state;
+    SocketKey getKey() {
+        return _key;
     }
 
     /**
-     * The SYN/ACK message which started this Socket's life. That message
-     * contains the remote host and port, along with the local address pair
+     * Contains the remote host and port, along with the local address pair
      * for this Socket.
      */
-    private NachosMessage _msg;
+    private SocketKey _key;
     /** Convenience variable for accessing the O.S.&nbsp;kernel. */
     NetKernel _kernel;
-    private SocketState _state;
 }

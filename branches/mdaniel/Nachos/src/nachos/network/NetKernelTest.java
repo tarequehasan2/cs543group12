@@ -60,7 +60,7 @@ public class NetKernelTest
         System.out.println("Sending PING");
         postOffice.send(ping);
         System.out.println("Waiting for ACK");
-        NachosMessage ack = postOffice.receive(srcPort);
+        NachosMessage ack = null; // postOffice.receive(srcPort);
         System.out.println("Received ACK from " + ack.getSourceHost()+ ":" + ack.getSourcePort());
 
         long endTime = Machine.timer().getTime();
@@ -71,7 +71,7 @@ public class NetKernelTest
     private static void pingServer() {
         while (true) {
             System.out.println("Waiting on Ping(:1) ...");
-            NachosMessage ping = postOffice.receive(1);
+            NachosMessage ping = null; // postOffice.receive(1);
 
             NachosMessage ack;
             try {
