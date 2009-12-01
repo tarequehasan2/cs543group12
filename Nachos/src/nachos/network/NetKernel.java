@@ -1,10 +1,7 @@
 package nachos.network;
 
-import java.util.HashMap;
-
 import nachos.machine.Lib;
 import nachos.machine.MalformedPacketException;
-import nachos.threads.Condition;
 import nachos.threads.KThread;
 import nachos.threads.Lock;
 import nachos.vm.VMKernel;
@@ -12,7 +9,8 @@ import nachos.vm.VMKernel;
 /**
  * A kernel with network support.
  */
-public class NetKernel extends VMKernel {
+public class NetKernel extends VMKernel
+{
     /**
      * Allocate a new networking kernel.
      */
@@ -23,16 +21,18 @@ public class NetKernel extends VMKernel {
     /**
      * Initialize this kernel.
      */
+    @Override
     public void initialize(String[] args) {
         super.initialize(args);
-
-        condLocks = new HashMap<Condition, Lock>();
-        connectConds = new HashMap<SocketKey, Condition>();
-     
-        postOffice = new PostOffice();
-        postOfficeSender = new PostOfficeSender(postOffice);
-        new KThread(postOfficeSender).fork();
-        new KThread(new TimerEventHandler(postOfficeSender)).fork();
+        _acceptLock = new Lock();
+        _acceptPids = new java.util.HashMap<Integer, Integer>();
+        PostOffice post = new PostOffice();
+        postOfficeSender = new PostOfficeSender(post);
+        dispatcher = new MessageDispatcher(/* post, */ postOfficeSender);
+        new KThread(postOfficeSender)
+                .setName("PostOfficeSender").fork();
+        new KThread(new TimerEventHandler(postOfficeSender))
+                .setName("TimerEvent").fork();
     }
 
     /**
@@ -41,6 +41,7 @@ public class NetKernel extends VMKernel {
      * assumes that the network is reliable (i.e. that the network's reliability
      * is 1.0).
      */
+    @Override
     public void selfTest() {
         NachosMessageTest.selfTest();
     }
@@ -49,6 +50,7 @@ public class NetKernel extends VMKernel {
     /**
      * Start running user programs.
      */
+    @Override
     public void run() {
         super.run();
     }
@@ -56,6 +58,7 @@ public class NetKernel extends VMKernel {
     /**
      * Terminate this kernel. Never returns.
      */
+    @Override
     public void terminate() {
     	PostOfficeSender.terminate();
     	TimerEventHandler.terminate();
@@ -63,97 +66,93 @@ public class NetKernel extends VMKernel {
 
     }
 
-    /**
-     * Grab the next SYN packet from the receive queue,
-     * send a SYN/ACK and return the SYN which shows the remote host, remote
-     * port, local host, local port and SEQ.
-     * @param port the port in the legal range to check for connections.
-     * @return the SYN message showing all relevant endpoint information.
-     */
-    public NachosMessage accept(int port) {
-        // grab a pending connection and ACK it
-        //debug("SYN("+port+")?");
-        NachosMessage syn = postOffice.nextSyn(port);
-        if (null != syn) {
-            debug("SYN("+port+") := "+syn);
-            NachosMessage ack;
-            try {
-                ack = NachosMessage.ack(syn);
-            } catch (MalformedPacketException e) {
-                Lib.assertNotReached(e.getMessage());
-                return null;
-            }
-            debug("ACK("+port+") -> ("+ack.getDestHost()+","+ack.getDestPort()+")");
-            postOfficeSender.send(ack);
-            // now the connection is established
-            debug("SYN-ACK complete("+port+"); welcome host:"+syn.getSourceHost());
-        }
-        return syn;
-    }
-
-    /** Allows the system to ack a specific sequence number. */
-    public void reportAck(NachosMessage message) {
-        postOfficeSender.ackMessage(message);
-    }
-
-    public void wakeConnect(NachosMessage synAck) {
-        SocketKey key = new SocketKey(
-                synAck.getDestHost(), synAck.getDestPort(), -1, -1);
-        final Condition cond = connectConds.get(key);
-        final Lock lock = condLocks.get(cond);
-        lock.acquire();
-        cond.wake();
-        lock.release();
-    }
-
     public void scheduleClose(SocketOpenFile sock) {
+        debug("close("+sock+")");
+        dispatcher.close(sock.getKey());
     }
 
-    private java.util.Map<Condition, Lock> condLocks;
-    private java.util.Map<SocketKey, Condition> connectConds;
+    public void dispatch(NachosMessage msg) {
+        debug("dispatch "+msg);
+        dispatcher.dispatch(msg);
+    }
+
     /**
-     * Send a SYN packet and await the SYN/ACK showing the connection is wired up.
-     * The protocol spec says this should wait on a Condition.
-     * @param host host id
-     * @param port port
-     * @return the message containing all the info
+     * Returns the SocketKey describing the accepted connection, or null
+     * if no connections are waiting.
+     * @param port the local port to accept upon.
+     * @return
      */
-    public NachosMessage connect(int host, int port) {
-        Lock l = new Lock();
-        Condition cond = new Condition(l);
-        condLocks.put(cond, l);
-        connectConds.put(new SocketKey(host, port, -1, -1), cond);
-        l.acquire();
-        cond.sleep();
-        l.release();
-        return null;
+    public SocketKey accept(int port) {
+        _acceptLock.acquire();
+        final int currentPid = currentProcess().getPid();
+        if (_acceptPids.containsKey(port) && _acceptPids.get(port) != currentPid) {
+            error("Attempt to double-accept on port "+port
+                    +"; conflicts with PID "+_acceptPids.get(port));
+            _acceptLock.release();
+            return null;
+        } else {
+            _acceptPids.put(port, currentPid);
+            _acceptLock.release();
+        }
+        if (! dispatcher.isInSynReceivedState(port)) {
+            return null;
+        }
+        debug("WooHoo SYN on "+port);
+        return dispatcher.accept(port);
+    }
+
+    public SocketKey connect(int host, int port) {
+        debug("connect("+host+","+port+")");
+        return dispatcher.connect(host, port);
     }
 
     /**
      * Pull a DATA packet out of the receive queue, or 0 if empty, or -1 on error.
-     * @param msg the socket's syn message for which we are reading
+     * @param key the socket key for which we are reading
      * @param data the buffer into which we put data
      * @param offset but not below this offset
      * @param len but not exceeding this length
      * @return the bytes read
      */
-    public int read(NachosMessage msg,
+    public int read(SocketKey key,
                       byte[] data, int offset, int len) {
-        return -1;
+        final int destHost = key.getDestHost();
+        final int destPort = key.getDestPort();
+        final int srcPort = key.getSourcePort();
+        final int srcHost = key.getSourceHost();
+        final String qualifier = "(" + destHost + "," + destPort
+                + "," + srcHost + "," + srcPort + ")";
+//        if (SocketState.ESTABLISHED == dispatcher.getSocketState(key.get))
+        NachosMessage msg = dispatcher.nextData(key);
+        int realLen = len - offset;
+        debug(qualifier+"DATA:="+msg+",want "+realLen+" bytes of it");
+        byte[] payload = msg.getPayload();
+        Lib.assertTrue(null != payload, "Egad, null payload?");
+        if (payload.length > realLen) {
+            final int pushbackBytes = payload.length - realLen;
+            debug(qualifier+"pushing back "+pushbackBytes);
+            dispatcher.pushBack(msg, pushbackBytes);
+        }
+        final int numBytes = Math.min(payload.length, realLen);
+        System.arraycopy(payload, 0, data, offset, numBytes);
+        return numBytes;
     }
-    public int write(NachosMessage msg,
+
+    public int write(SocketKey key,
                       byte[] data, int offset, int len) {
-        final int destHost = msg.getDestHost();
-        final int destPort = msg.getDestPort();
-        final int srcPort = msg.getSourcePort();
-        final int srcHost = msg.getSourceHost();
+        final int destHost = key.getDestHost();
+        final int destPort = key.getDestPort();
+        final int srcPort = key.getSourcePort();
+        final int srcHost = key.getSourceHost();
         final String qualifier = "(" + destHost + "," + destPort
                 + "," + srcHost + "," + srcPort + ")";
         // compose up to NachosMessage.MAX_CONTENTS_LENGTH chunk, and tack it
         // into the outgoing queue for the given (host,port) tuple
-        int written = 0;
-        for (int i = 0; i < len; i += NachosMessage.MAX_CONTENTS_LENGTH) {
-            byte[] contents = new byte[ len - offset ];
+        final int realLen = len - offset;
+        for (int i = 0; i < realLen; /*empty*/ ) {
+            byte[] contents = new byte[
+                    Math.min(realLen, NachosMessage.MAX_CONTENTS_LENGTH) ];
+            i += contents.length;
             System.arraycopy(data, i, contents, 0, contents.length );
             NachosMessage datagram;
             try {
@@ -163,11 +162,10 @@ public class NetKernel extends VMKernel {
                 error(qualifier+".write := " +e.getMessage());
                 return -1;
             }
-            debug("DATA:="+datagram);
+            debug(qualifier+".WRITE-DATA:="+datagram);
             postOfficeSender.send(datagram);
-            written += contents.length;
         }
-        return written;
+        return realLen;
     }
 
     private void error(String msg) {
@@ -178,7 +176,14 @@ public class NetKernel extends VMKernel {
         Lib.debug(dbgFlag, msg);
     }
 
-    private PostOffice postOffice;
+    /** Protects {@link #_acceptPids}. */
+    private Lock _acceptLock;
+    /**
+     * Contains a mapping between local ports
+     * to the PIDs which are accepting on them.
+     */
+    private java.util.Map<Integer, Integer> _acceptPids;
+    private MessageDispatcher dispatcher;
     private PostOfficeSender postOfficeSender;
     private char dbgFlag = 'K';
 }

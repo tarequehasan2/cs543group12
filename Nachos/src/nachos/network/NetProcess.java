@@ -1,8 +1,5 @@
 package nachos.network;
 
-import java.util.HashMap;
-import java.util.Map;
-
 import nachos.machine.Lib;
 import nachos.vm.VMProcess;
 
@@ -15,6 +12,7 @@ public class NetProcess extends VMProcess {
      */
     public NetProcess() {
         super();
+        _kernel = ((NetKernel) NetKernel.kernel);
     }
 
     protected static final int
@@ -36,6 +34,7 @@ public class NetProcess extends VMProcess {
      * @param    a3    the fourth syscall argument.
      * @return the value to be returned to the user.
      */
+    @Override
     public int handleSyscall(int syscall, int a0, int a1, int a2, int a3) {
         switch (syscall) {
             case syscallAccept:
@@ -49,42 +48,30 @@ public class NetProcess extends VMProcess {
 
     protected int handleAccept(int port) {
         debug("ACCEPT("+port+")");
-        NachosMessage syn = ((NetKernel) NetKernel.kernel).accept(port);
-        if (null == syn) {
-            // we don't know if it didn't shake or error, but either way ...
+        SocketKey key = _kernel.accept(port);
+        if (null == key) {
             return -1;
         }
-        if (numOpenFiles < maxNumFiles){
-        	int fd = 0;
-        	for (int i=0; i<fileDescriptors.length; i++){
-        		if (fileDescriptors[fd] == null){
-        			fileDescriptors[fd] = new SocketOpenFile(syn);
-        			numOpenFiles++;
-        			return fd;
-        		}else{
-        			fd++;
-        		}
-        	}
-        }
-        return -1;
+        return assignFdAndReturnIt(key);
     }
 
     protected int handleConnect(int host, int port) {
         debug("CONNECT("+host+","+port+")");
-        NachosMessage ack = ((NetKernel) NetKernel.kernel).connect(host, port);
-        if (null == ack) {
+        SocketKey key = _kernel.connect(host, port);
+        if (null == key) {
             error("Connect didn't return an ACK");
             return -1;
         }
+        return assignFdAndReturnIt(key);
+    }
+
+    private int assignFdAndReturnIt(SocketKey key) {
         if (numOpenFiles < maxNumFiles){
-        	int fd = 0;
-        	for (int i=0; i<fileDescriptors.length; i++){
-        		if (fileDescriptors[fd] == null){
-        			fileDescriptors[fd] = new SocketOpenFile(ack);
+        	for (int i = 0; i < fileDescriptors.length; i++){
+        		if (fileDescriptors[i] == null){
+        			fileDescriptors[i] = new SocketOpenFile(key);
         			numOpenFiles++;
-        			return fd;
-        		}else{
-        			fd++;
+        			return i;
         		}
         	}
         }
@@ -99,6 +86,11 @@ public class NetProcess extends VMProcess {
         Lib.debug(dbgFlag, "DEBUG:" + this + "::" + msg);
     }
 
-    protected static Map<SocketKey, SocketOpenFile> sockets = new HashMap<SocketKey, SocketOpenFile>();
-    private char dbgFlag = 'P';
+    @Override
+    public String toString() {
+        return "NetProcess["+getPid()+"]";
+    }
+
+    private NetKernel _kernel;
+    private char dbgFlag = 'N';
 }

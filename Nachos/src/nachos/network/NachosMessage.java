@@ -1,11 +1,19 @@
 package nachos.network;
 
-import nachos.machine.Machine;
 import nachos.machine.MalformedPacketException;
 import nachos.machine.Packet;
 
 public class NachosMessage
 {
+    /**
+     * Constructs a new NachosMessage which can be used to ACK the
+     * provided message. It does this by reversing the source and
+     * destination parts, setting the ACK flag and setting this message's
+     * sequence number to the sequence number of your message.
+     * @param msg the message to ack.
+     * @return the new message which will ack the provided message.
+     * @throws MalformedPacketException if unable to construct your message
+     */
     public static NachosMessage ack(NachosMessage msg)
             throws MalformedPacketException {
         NachosMessage result = new NachosMessage(
@@ -14,6 +22,14 @@ public class NachosMessage
                 ACK, new byte[0]);
         result._seq = msg._seq;
         return result;
+    }
+
+    public static NachosMessage fin(int destHost, int destPort,
+                                    int sourceHost, int sourcePort)
+            throws MalformedPacketException {
+        return new NachosMessage(destHost, destPort,
+                sourceHost, sourcePort,
+                FIN, new byte[0]);
     }
 
     /**
@@ -36,9 +52,9 @@ public class NachosMessage
     }
 
     /**
-     * Creates a Nachos Message suitable for reporting FIN/ACK
-     * to the provided FIN message.
-     * @param syn The FIN message to which we are replying.
+     * Creates a Nachos Message suitable for reporting SYN/ACK
+     * to the provided SYN message.
+     * @param syn The SYN message to which we are replying.
      * @return a newly constructed Nachos Message suitable for replying to
      * the provided message.
      * @throws MalformedPacketException if unable to construct said message.
@@ -69,17 +85,30 @@ public class NachosMessage
                 SYN, new byte[0]);
     }
 
+    /**
+     * Constructs a shortened version of the given NachosMessage,
+     * which only contains the last <em>bytes</em> bytes of the original message.
+     * It is my discretion to return a modified version of your message
+     * or a new message, so you should consider the first parameter as
+     * my property from now on.
+     * @param msg the message to shorten its payload
+     * @param bytes the number of bytes <u>remaining</u> in the new message.
+     * @return a (lets call it) new message containing only <em>bytes</em>
+     * bytes of payload.
+     */
+    public static NachosMessage shorten(NachosMessage msg, int bytes) {
+        byte[] tmp = new byte[ bytes ];
+        System.arraycopy(msg._payload, bytes, tmp, 0, tmp.length );
+        msg._payload = tmp;
+        return msg;
+    }
+
     public static NachosMessage pong(NachosMessage ping)
             throws MalformedPacketException {
         return new NachosMessage(
                 ping.getSourceHost(), ping.getSourcePort(),
                 ping.getDestHost(), ping.getDestPort(),
                 ping.getPayload());
-    }
-
-    /** Returns true iff this message has no control flags set. */
-    public boolean isData() {
-        return !( _ack || _fin || _stp || _syn );
     }
 
     /** Indicates the number of bytes required for our header. */
@@ -152,6 +181,13 @@ public class NachosMessage
         if (raw.contents.length < HEADER_SIZE) {
             throw new MalformedPacketException();
         }
+        System.err.print("PACKET(");
+        for (byte b : raw.packetBytes) {
+            System.err.print(Integer.toHexString(b & 0xFF));
+            System.err.print(' ');
+        }
+        System.err.println(")");
+        System.err.flush();
         // dport sport mbzhi mbzlo seq[4] dat dat dat
         final int dataOffset = HEADER_SIZE;
         _payload = new byte[ raw.contents.length - dataOffset ];
@@ -211,6 +247,7 @@ public class NachosMessage
 
     public void setSequence(int seq) {
         _seq = seq;
+        writeSequence(_packet.contents, 4, _seq);
     }
 
     public byte[] getPayload() {
