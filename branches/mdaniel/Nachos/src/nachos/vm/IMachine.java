@@ -1,0 +1,15 @@
+package nachos.vm;
+
+import nachos.machine.NetworkLink;
+import nachos.machine.TranslationEntry;
+
+interface IMachine
+{
+    public byte[] getMemory();
+    public int getNumPhysPages();
+    public int getPageSize();
+    public int getTlbSize();
+    public TranslationEntry readTlbEntry(int i);
+    public void writeTlbEntry(int i, TranslationEntry entry);
+    public NetworkLink getNetworkLink();
+}
