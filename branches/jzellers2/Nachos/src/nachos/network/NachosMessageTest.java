@@ -97,7 +97,7 @@ public class NachosMessageTest
         assertTrue(dHost == syn.getDestHost(), "Wrong dest host");
         assertTrue(dPort == syn.getDestPort(), "Wrong dest port");
         assertTrue(myLinkId == syn.getSourceHost(), "Wrong source host");
-        assertTrue(srcPort != syn.getSourcePort(), "Wrong source port");
+        assertTrue(srcPort == syn.getSourcePort(), "Wrong source port");
         assertTrue(0 != syn.getSequence(), "No sequence?");
         assertTrue( !syn.isACK(), "ACK?!" );
         assertTrue( !syn.isFIN(), "FIN?!" );

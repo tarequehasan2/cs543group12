@@ -1,5 +1,7 @@
 package nachos.network;
 
+import java.util.HashMap;
+
 import nachos.machine.Lib;
 import nachos.machine.MalformedPacketException;
 import nachos.threads.Condition;
@@ -23,6 +25,10 @@ public class NetKernel extends VMKernel {
      */
     public void initialize(String[] args) {
         super.initialize(args);
+
+        condLocks = new HashMap<Condition, Lock>();
+        connectConds = new HashMap<SocketKey, Condition>();
+     
         postOffice = new PostOffice();
         postOfficeSender = new PostOfficeSender(postOffice);
         new KThread(postOfficeSender).fork();
