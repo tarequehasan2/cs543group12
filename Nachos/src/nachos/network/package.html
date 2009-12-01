@@ -30,11 +30,26 @@ Provides classes that allow Nachos processes to communicate over the network.
         a tuple (SocketKey) is created from the NachosMessage
     </li><li>
         the socket state is looked up based on the SocketKey
-        <em>for the purposes of this dialog, we'll assume its finds the socket
-        state to be SYN_SENT and the NachosMessage is a SYNACK</em>
-    </li><li>
-        move the the socket state to ESTABLISHED
-        wake the (local port, aka destination port) Condition
+        	<ul>
+        		<li>if the socket state is SYN_SENT and the NachosMessage is a SYNACK 
+        			<ul>
+        			 <li>move the the socket state to ESTABLISHED
+        			 </li><li>wake the (local port, aka destination port) Condition</li>
+        			</ul>
+        		</li>
+        		<li>if the socket state is ESTABLISHED and the NachosMessage is DATA 
+        			<ul>
+        			 <li>if the receive buffer contains less than 16 packets, move the nachos message in to the receive buffer
+        			 </li><li>if the receive buffer contains 16 packets, drop the NachosMessage</li>
+        			</ul>
+        		</li>
+        	</ul>
+        	<ul><li>
+        	<em>How do we know which packets belong to a single message?  (One message can be chopped up in to multiple packets) </em>
+        	
+        	</li><li>
+        	<em>What happens is a single message exceeds the buffer (More than 16 packets)</em>
+        	</li></ul>
     </li><li>
         ...
     </li><li>
