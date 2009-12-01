@@ -1,6 +1,7 @@
 package nachos.vm;
 
 import nachos.machine.Machine;
+import nachos.machine.NetworkLink;
 import nachos.machine.Processor;
 import nachos.machine.TranslationEntry;
 
@@ -42,6 +43,11 @@ public class MockMachine implements IMachine
     public void writeTlbEntry(int i, TranslationEntry entry) {
         tlb[i] = new TranslationEntry(entry);
     }
+
+	@Override
+	public NetworkLink getNetworkLink() {
+		return null;
+	}
 
     /**
      * Copies one page from the actual Machine into this IMachine's memory

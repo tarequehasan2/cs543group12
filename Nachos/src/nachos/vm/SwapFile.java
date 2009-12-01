@@ -4,13 +4,16 @@ import java.util.HashSet;
 import java.util.Set;
 
 import nachos.machine.FileSystem;
+import nachos.machine.Kernel;
+import nachos.machine.Machine;
 import nachos.machine.OpenFile;
 import nachos.machine.Processor;
+import nachos.network.NetKernel;
 import nachos.threads.Lock;
 
 public class SwapFile {
     protected static IMachine machine = LiveMachine.getInstance();
-	private static final String SWAP_FILE_NAME = "swap";
+	private static final String SWAP_FILE_NAME;
     /**
      * Contains the frame size in the swap file. This will always be
      * greater than or equal to {@link Processor#pageSize}.
@@ -22,6 +25,11 @@ public class SwapFile {
 	private static final Lock swapFileLock;
 
 	static {
+		StringBuilder swapName = new StringBuilder("swap");
+		if (machine.getNetworkLink() != null){
+			swapName.append(".").append(machine.getNetworkLink().getLinkAddress());
+		}
+		SWAP_FILE_NAME = swapName.toString();
         fileSystem = nachos.machine.Machine.stubFileSystem();
         swap = fileSystem.open(SWAP_FILE_NAME, true);
         // don't add any, because the swap is initially zero sized

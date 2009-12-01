@@ -1,19 +1,26 @@
 package nachos.network;
 
-import nachos.machine.*;
-import nachos.threads.*;
+import nachos.machine.Lib;
+import nachos.machine.Machine;
+import nachos.machine.MalformedPacketException;
+import nachos.machine.NetworkLink;
+import nachos.machine.Packet;
+import nachos.threads.KThread;
+import nachos.threads.Lock;
+import nachos.threads.Semaphore;
+import nachos.threads.SynchList;
 
 /**
- * A collection of message queues, one for each local port. A
- * <tt>PostOffice</tt> interacts directly with the network hardware. Because
- * of the network hardware, we are guaranteed that messages will never be
+ * A collection of message dataQueues, one for each local port. A
+ * <tt>PostOffice</tt> interacts directly with the network hardware. Because of
+ * the network hardware, we are guaranteed that messages will never be
  * corrupted, but they might get lost.
- *
- * <p>
+ * <p/>
+ * <p/>
  * The post office uses a "postal worker" thread to wait for messages to arrive
- * from the network and to place them in the appropriate queues. This cannot
- * be done in the receive interrupt handler because each queue (implemented
- * with a <tt>SynchList</tt>) is protected by a lock.
+ * from the network and to place them in the appropriate dataQueues. This cannot be
+ * done in the receive interrupt handler because each queue (implemented with a
+ * <tt>SynchList</tt>) is protected by a lock.
  */
 public class PostOffice {
     /**
@@ -22,75 +29,161 @@ public class PostOffice {
      * "postal worker" thread.
      */
     public PostOffice() {
-	messageReceived = new Semaphore(0);
-	messageSent = new Semaphore(0);
-	sendLock = new Lock();
+        _kernel = (NetKernel) NetKernel.kernel;
+        messageReceived = new Semaphore(0);
+        messageSent = new Semaphore(0);
+        sendLock = new Lock();
 
-	queues = new SynchList[MailMessage.portLimit];
-	for (int i=0; i<queues.length; i++)
-	    queues[i] = new SynchList();
+        dataQueues = new SynchList[ NachosMessage.PORT_LIMIT ];
+        for (int i = 0; i < dataQueues.length; i++) {
+            dataQueues[i] = new SynchList();
+        }
 
-	Runnable receiveHandler = new Runnable() {
-	    public void run() { receiveInterrupt(); }
-	};
-	Runnable sendHandler = new Runnable() {
-	    public void run() { sendInterrupt(); }
-	};
-	Machine.networkLink().setInterruptHandlers(receiveHandler,
-						   sendHandler);
+        synQueues = new SynchList[ NachosMessage.PORT_LIMIT ];
+        for (int i = 0; i < synQueues.length; i++) {
+            synQueues[i] = new SynchList();
+        }
 
-	KThread t = new KThread(new Runnable() {
-		public void run() { postalDelivery(); }
-	    });
+        Runnable receiveHandler = new Runnable() {
+            public void run() {
+                receiveInterrupt();
+            }
+        };
+        Runnable sendHandler = new Runnable() {
+            public void run() {
+                sendInterrupt();
+            }
+        };
+        Machine.networkLink().setInterruptHandlers(
+                receiveHandler,
+                sendHandler);
 
-	t.fork();
+        KThread t = new KThread(new Runnable() {
+            public void run() {
+                postalDelivery();
+            }
+        });
+
+        t.fork();
     }
 
     /**
      * Retrieve a message on the specified port, waiting if necessary.
      *
-     * @param	port	the port on which to wait for a message.
-     *
-     * @return	the message received.
+     * @param    port    the port on which to wait for a message.
+     * @return the message received.
      */
-    public MailMessage receive(int port) {
-	Lib.assertTrue(port >= 0 && port < queues.length);
+    public NachosMessage receive(int port) {
+        Lib.assertTrue(port >= 0 && port < dataQueues.length);
 
-	Lib.debug(dbgNet, "waiting for mail on port " + port);
+        debug("waiting for mail on port " + port);
 
-	MailMessage mail = (MailMessage) queues[port].removeFirst();
+        NachosMessage mail = (NachosMessage) dataQueues[port].removeFirst();
 
-	if (Lib.test(dbgNet))
-	    System.out.println("got mail on port " + port + ": " + mail);
+        SocketEvent event = SocketEvent.getEvent(mail);
+        SocketOpenFile socket = NetProcess.sockets.get(new SocketKey(mail));
 
-	return mail;
+      try {
+		SocketTransition.doEvent(socket, event );
+	} catch (FailSyscall e) {
+		// TODO Auto-generated catch block
+		e.printStackTrace();
+	} catch (ProtocolError e) {
+		// TODO Auto-generated catch block
+		e.printStackTrace();
+	} catch (ProtocolDeadlock e) {
+		// TODO Auto-generated catch block
+		e.printStackTrace();
+	}
+
+        debug("got mail on port " + port + ": " + mail);
+
+        return mail;
+    }
+
+    public NachosMessage nextSyn(int port) {
+        Lib.assertTrue(port >= 0 && port < synQueues.length);
+
+        // debug("waiting for SYN on port " + port);
+
+        NachosMessage mail = (NachosMessage)
+                synQueues[port].removeFirstWithoutBlocking();
+        if (null != mail) {
+            debug("got SYN on port " + port + ": " + mail);
+        }
+
+        return mail;
     }
 
     /**
      * Wait for incoming messages, and then put them in the correct mailbox.
+     * Notify the ProtocolStateMachine for the specific Socket.
+     * <hr/>
+     * <ol>
+     * <li> If it's a DATA, put it in the mailbox for the incoming port.
+     * <li> If it's a SYN packet, put in it in the SYN queue
+     * <li> If it's a SYN-ACK packet, transition the socket to ESTABLISHED and wake the connect Condition.
+     * <li> If it's a ACK packet, find the SEQ in the POSender
+     * <li> If it's a STP packet, inform the Socket no more writes
+     * <li> If it's a FIN packet, reply with fin-ack
+     * <li> If it's a FIN-ACK packet, notify it's actually closed and can be dealloced
+     * </ol>
      */
     private void postalDelivery() {
-	while (true) {
-	    messageReceived.P();
+        while (true) {
+            messageReceived.P();
 
-	    Packet p = Machine.networkLink().receive();
+            Packet p = Machine.networkLink().receive();
 
-	    MailMessage mail;
+            NachosMessage msg;
+            try {
+                msg = new NachosMessage(p);
+            } catch (MalformedPacketException e) {
+                e.printStackTrace(System.err);
+                continue;
+            }
+            // 1.
+            if (! (msg.isData())) {
+                debug("delivering mail to port " + msg.getDestPort()
+                            + ": " + msg);
+                dataQueues[msg.getDestPort()].add(msg);
+                continue;
+            } else
+            // 2.
+            if (msg.isSYN() && !msg.isACK()) {
+                debug("delivering SYN on port " + msg.getDestPort()
+                            + ": " + msg);
+                synQueues[msg.getDestPort()].add(msg);
+                continue;
+            } else
+            // 3.
+            if (msg.isSYN() && msg.isACK()) {
 
-	    try {
-		mail = new MailMessage(p);
-	    }
-	    catch (MalformedPacketException e) {
-		continue;
-	    }
-
-	    if (Lib.test(dbgNet))
-		System.out.println("delivering mail to port " + mail.dstPort
-				   + ": " + mail);
-
-	    // atomically add message to the mailbox and wake a waiting thread
-	    queues[mail.dstPort].add(mail);
-	}
+                psm.getMachine(new SocketKey(msg))
+                        .onSYNACK();
+                _kernel.wakeConnect(msg);
+                continue;
+            }
+            // 4.
+            if (msg.isACK()) {
+                _kernel.reportAck(msg);
+                continue;
+            } else
+            // 5.
+            if (msg.isSTP()) {
+                continue;
+            } else
+            // 6.
+            if (msg.isFIN() && !msg.isACK()) {
+                continue;
+            } else
+            // 7.
+            if (msg.isFIN() && msg.isACK()) {
+                continue;
+            } else {
+                error("Unknown PostOffice situation!");
+            }
+        }
     }
 
     /**
@@ -98,22 +191,21 @@ public class PostOffice {
      * link.
      */
     private void receiveInterrupt() {
-	messageReceived.V();
+        messageReceived.V();
     }
 
     /**
      * Send a message to a mailbox on a remote machine.
      */
-    public void send(MailMessage mail) {
-	if (Lib.test(dbgNet))
-	    System.out.println("sending mail: " + mail);
+    public void send(NachosMessage mail) {
+        debug("sending mail: " + mail);
 
-	sendLock.acquire();
+        sendLock.acquire();
 
-	Machine.networkLink().send(mail.packet);
-	messageSent.P();
+        Machine.networkLink().send(mail.toPacket());
+        messageSent.P();
 
-	sendLock.release();
+        sendLock.release();
     }
 
     /**
@@ -122,13 +214,25 @@ public class PostOffice {
      * dropped.
      */
     private void sendInterrupt() {
-	messageSent.V();
+        messageSent.V();
     }
 
-    private SynchList[] queues;
-    private Semaphore messageReceived;	// V'd when a message can be dequeued
-    private Semaphore messageSent;	// V'd when a message can be queued
-    private Lock sendLock;
+    private void error(String msg) {
+        System.err.println("ERROR:"+NetworkLink.networkID+"::"+msg);
+    }
 
+    private void debug(String msg) {
+        Lib.debug(dbgNet, "DEBUG:"+NetworkLink.networkID+"::"+msg);
+        System.out.println("DEBUG:"+NetworkLink.networkID+"::"+msg);
+    }
+
+    private SynchList[] dataQueues;
+    private SynchList[] synQueues;
+    private Semaphore messageReceived;    // V'd when a message can be dequeued
+    private Semaphore messageSent;    // V'd when a message can be queued
+    private Lock sendLock;
+    private ProtocolStateMachine psm;
+    /** Convenience variable instead of casting all the time. */
+    private NetKernel _kernel;
     private static final char dbgNet = 'n';
 }

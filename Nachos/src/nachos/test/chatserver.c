@@ -2,12 +2,6 @@
 
 #define CHAT_PORT 15
 
-#ifdef WITH_DEBUG
-#define DEBUG(...) fprintf(debugFD, __VA_ARGS__)
-#else
-#define DEBUG(...) if (0) printf(".")
-#endif
-
 #ifndef EXIT_FAILURE
 #define EXIT_FAILURE 1
 #endif/*EXIT_FAILURE*/
@@ -44,23 +38,14 @@ int main(int argc, char* argv[])
 {
   FILE sock;
   int  i;
-#ifdef WITH_DEBUG
-  FILE debugFD;
-  if (-1 == (debugFD = creat("server.debug.log"))) {
-    printf("ERROR:unable to creat server.debug.log\n");
-    return EXIT_FAILURE;
-  }
-#endif
 
   numClients = 0; /* explicitly initialize it */
   buf_len = 0; /* explicitly initialize it */
 
   do {
-    DEBUG("accepting...\n");
     if (-1 == (sock = accept(CHAT_PORT))) {
       /* no client? check for charpress on stdin */
       if (-1 != non_blocking_getchar()) {
-        DEBUG("getchar said something, bye!\n");
         break;
       }
     }
@@ -69,31 +54,23 @@ int main(int argc, char* argv[])
       client_sockets[numClients] = sock;
       numClients++;
     }
-    DEBUG("checking all clients\n");
-    /* see if anyone said anything */
     for (i = 0; i < numClients; i++) {
       int ch;
       if (-1 != (ch = non_blocking_fgetc(client_sockets[i]))) {
-        DEBUG("client %d said something\n", i);
         buffer[ buf_len ] = ch;
         buf_len++;
         if (buf_len > sizeof(buffer) || '\n' == ch) {
-          DEBUG("broadcasting\n");
           broadcast();
           buf_len = 0;
         }
       }
     }
-    DEBUG("loop...\n");
   } while (1 == 1);
-  DEBUG("closing everyone down\n");
   for (i = 0; i < numClients; i++) {
     if (-1 == close(client_sockets[i])) {
       printf("Unable to close socket[%d]\n", i);
-      /* not fatal, keep going */
     }
   }
-  return 0;
 }
 
 void broadcast()

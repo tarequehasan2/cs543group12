@@ -1,3 +1,108 @@
 <body>
 Provides classes that allow Nachos processes to communicate over the network.
+<h3>Client Connecting to Server</h3>
+<ol>
+    <li>
+        NetProcess handles connect()
+    </li>
+    <li>
+        NetProcess grabs the next free local port (local port),
+        and registers that it is speaking to (host, port)
+        <p><em>technically, so long as any local port isn't already speaking
+        to (host, port) we can use it because the connection is uniquely
+        identified by the 4-part tuple (dst host, dst port, src host, src port)
+        and thus the Packet dispatcher knows exactly into which queue to place
+        a Packet.</em></p>
+    </li>
+    <li>
+        NetProcess queues a SYN to (host, port, local host, local port)
+        move the socket state to SYN_SENT
+    </li>
+    <li>
+        NetProcess wait()s on (host, port, local host, local port) Condition
+    </li><li>
+        later:<br/>
+        Nachos receives a Packet and calls the Receive Interrupt Handler (RIH)
+    </li><li>
+        RIH pokes the dispatcher thread, which can then pick up the Packet
+        from the Nachos hardware and cooks it into a NachosMessage
+    </li><li>
+        a tuple (SocketKey) is created from the NachosMessage
+    </li><li>
+        the socket state is looked up based on the SocketKey
+        	<ul>
+        		<li>if the socket state is SYN_SENT and the NachosMessage is a SYNACK 
+        			<ul>
+        			 <li>move the the socket state to ESTABLISHED
+        			 </li><li>wake the (local port, aka destination port) Condition</li>
+        			</ul>
+        		</li>
+        		<li>if the socket state is ESTABLISHED and the NachosMessage is DATA 
+        			<ul>
+        			 <li>if the receive buffer contains less than 16 packets, move the nachos message in to the receive buffer
+        			 </li><li>if the receive buffer contains 16 packets, drop the NachosMessage</li>
+        			</ul>
+        		</li>
+        	</ul>
+        	<ul><li>
+        	<em>How do we know which packets belong to a single message?  (One message can be chopped up in to multiple packets) </em>
+        	
+        	</li><li>
+        	<em>What happens is a single message exceeds the buffer (More than 16 packets)</em>
+        	</li></ul>
+    </li><li>
+        ...
+    </li><li>
+        UserProcess calls read() on SocketOpenFile
+    </li><li>
+        SocketOpenFile pulls a data packet out of the receive queue for its SocketKey
+        if none, it returns 0; if the socket state is not ESTABLISHED, return -1
+    </li><li>
+        UserProcess calls write() on SocketOpenFile
+    </li><li>
+        SocketOpenFile chops up the write buf into Packet sized chunks
+        SocketOpenFile puts them on the send queue
+        <p>
+        if the Window is full, then SocketOpenFile waits on the Window ACK Condition
+        </p>
+        <p>
+        every time the Packet Transmitter ACKs a Message,
+        it wake()s the Window ACK Condition
+        </p>
+    </li><li>
+        ...
+    </li><li>
+        if Packet Dispatcher receives a STP, it flushes the send queue
+        and moves the socket state to STP_RCVD
+    </li><li>
+        UserProcess calls close() on SocketOpenFile
+    </li><li>
+       if socket state is ESTABLISHED and if send queue is empty, then
+        SocketOpenFile sends FIN and moves the socket state to CLOSING.
+        if send state is EST and send queue is not empty, then
+        send STP and move the socket state to STP_SENT.
+    </li><li>
+        dispatcher receives a FIN packet when the other endpoint
+        has received all data up to the STP@SEQ;
+        transmits FINACK
+        moves the socket state to CLOSED
+    </li>
+</ol>
+<h3>Server Listening for Clients</h3>
+<ol>
+    <li>
+        NetProcess handles accept()
+    </li><li>
+        NetProcess checks to see if socket state for (port) is SYN_RCVD
+        if not, return -1
+        else {
+            new SocketKey (foreign host, foreign port, local host, local port)
+            new SocketOpenFile( socketKey )
+            TX SYNACK
+            move socket state to ESTABLISHED
+        }
+    </li><li>
+        ... as above ...
+    </li>
+</ol>
 </body>
