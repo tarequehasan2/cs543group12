@@ -26,6 +26,7 @@ public class NetKernel extends VMKernel {
         postOffice = new PostOffice();
         postOfficeSender = new PostOfficeSender(postOffice);
         new KThread(postOfficeSender).fork();
+        new KThread(new TimerEventHandler(postOfficeSender)).fork();
     }
 
     /**
@@ -51,6 +52,7 @@ public class NetKernel extends VMKernel {
      */
     public void terminate() {
     	PostOfficeSender.terminate();
+    	TimerEventHandler.terminate();
         super.terminate();
 
     }
