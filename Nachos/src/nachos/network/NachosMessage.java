@@ -127,7 +127,7 @@ public class NachosMessage
         _srcHost = srcLink;
         _srcPort = srcPort;
         _payload = contents;
-        _seq = (int)System.currentTimeMillis();
+        _seq = -1;
         byte[] pContents = new byte[ _payload.length + HEADER_SIZE ];
         pContents[0] = (byte)(dstPort & 0xFF);
         pContents[1] = (byte)(srcPort & 0xFF);
@@ -207,6 +207,10 @@ public class NachosMessage
 
     public int getSequence() {
         return _seq;
+    }
+
+    public void setSequence(int seq) {
+        _seq = seq;
     }
 
     public byte[] getPayload() {
