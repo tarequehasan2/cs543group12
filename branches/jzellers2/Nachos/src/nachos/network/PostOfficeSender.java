@@ -14,6 +14,8 @@ public class PostOfficeSender implements Runnable {
 		this.postOffice = postOffice;
 	}
 	private HashMap<SocketKey, LinkedList<NachosMessage>> sendBuffer = new HashMap<SocketKey, LinkedList<NachosMessage>>();
+
+	private HashMap<SocketKey, Integer> currentSeqNum = new HashMap<SocketKey, Integer>();
 	
 	private final int SEND_WINDOW = 16;
 	
@@ -32,6 +34,20 @@ public class PostOfficeSender implements Runnable {
 			for (SocketKey socketKey : sendBuffer.keySet()){
 				if (!sendBuffer.get(socketKey).isEmpty() && unackedBuffer.get(socketKey).size() < SEND_WINDOW){
 					NachosMessage message = sendBuffer.get(socketKey).removeFirst();
+					if (-1 == message.getSequence()) {
+						if (currentSeqNum.containsKey(socketKey)) {
+							int seq = currentSeqNum.get(socketKey);
+							message.setSequence(seq);
+							seq++;
+							currentSeqNum.put(socketKey, seq);
+						}
+						else {
+							int seq = 0;
+							message.setSequence(seq);
+							seq++;
+							currentSeqNum.put(socketKey, seq);
+						}
+					}
 					postOffice.send(message);
 					if (unackedBuffer.containsKey(socketKey)){
 						unackedBuffer.get(socketKey).add(message);
