@@ -1,5 +1,7 @@
 package nachos.network;
 
+import nachos.machine.Machine;
+
 // import nachos.machine.Machine;
 
 public class SocketKey {
@@ -13,19 +15,23 @@ public class SocketKey {
 	}
 
 	SocketKey(NachosMessage message){
-//		if (message.getSourceHost() == Machine.networkLink().getLinkAddress() ){  //packet sent
 			this.sourceHost = message.getSourceHost();
 			this.sourcePort = message.getSourcePort();
 			this.destHost = message.getDestHost();
 			this.destPort = message.getDestPort();
-//		}else{  // packet received
-//			this.destHost = message.getSourceHost();
-//			this.destPort = message.getSourcePort();
-//			this.sourceHost = message.getDestHost();
-//			this.sourcePort = message.getDestPort();
-//		}
 	}
 
+	SocketKey(NachosMessage message, boolean reverse){
+		this(message);		
+		if (reverse){
+			this.destHost = message.getSourceHost();
+			this.destPort = message.getSourcePort();
+			this.sourceHost = message.getDestHost();
+			this.sourcePort = message.getDestPort();
+		}
+	}
+	
+	
 	public int getSourceHost() {
 		return sourceHost;
 	}
