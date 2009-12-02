@@ -248,6 +248,7 @@ public class NachosMessage
     public void setSequence(int seq) {
         _seq = seq;
         writeSequence(_packet.contents, 4, _seq);
+        writeSequence(_packet.packetBytes, 8, _seq);
     }
 
     public byte[] getPayload() {
