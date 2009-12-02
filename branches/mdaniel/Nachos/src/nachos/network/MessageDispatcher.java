@@ -185,7 +185,14 @@ public class MessageDispatcher {
      * @see #pushBack(NachosMessage, int)
      */
     public NachosMessage nextData(SocketKey key) {
-        return _queues.get(key).remove(0);
+        if (! _queues.containsKey(key)) {
+            return null;
+        }
+        final List<NachosMessage> receiveQ = _queues.get(key);
+        if (receiveQ.isEmpty()) {
+            return null;
+        }
+        return receiveQ.remove(0);
     }
 
     /**
