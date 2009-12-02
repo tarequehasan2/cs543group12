@@ -143,7 +143,6 @@ public class NetKernel extends VMKernel
 
     public int write(SocketKey key,
                       byte[] data, int offset, int len) {
-        key = key.reverse();
         final int destHost = key.getDestHost();
         final int destPort = key.getDestPort();
         final int srcPort = key.getSourcePort();

@@ -1,25 +1,28 @@
 #include "stdio.h"
 
 #define CHAT_PORT 15
+#define FGETC_ERRNO -2
 
 #ifndef EXIT_FAILURE
 #define EXIT_FAILURE 1
 #endif/*EXIT_FAILURE*/
 
-static char buffer[1024];
+static char buffer[80];
 static int  buf_len;
-static FILE client_sockets[1024];
+static FILE client_sockets[80];
 static int  numClients;
 
 /*
  * Implements the getchar function except without blocking.
- * @return the read character or -1 if no character is available.
+ * @return the read character, -1 if no character is available, 
+ * or FGETC_ERRNO on error.
  */
 int non_blocking_getchar();
 /*
  * Implements the fgetc function except without blocking.
  * @param fd the file descriptor from which to read.
- * @return the read character or -1 if no character is available.
+ * @return the read character, -1 if no character is available,
+ * or FGETC_ERRNO on error.
  */
 int non_blocking_fgetc(FILE fd);
 /*
@@ -49,8 +52,14 @@ int main(int argc, char* argv[])
   	    busy++;
   	} 
     if (-1 == (sock = accept(CHAT_PORT))) {
+      int ch;
       /* no client? check for charpress on stdin */
-      if (-1 != non_blocking_getchar()) {
+      ch = non_blocking_getchar();
+      if (FGETC_ERRNO == ch) {
+        printf("ERROR reading from stdin!\n");
+        break;
+      } else if (-1 != ch) {
+        printf("keypress: bye, now!\n");
         break;
       }
     }
@@ -60,11 +69,23 @@ int main(int argc, char* argv[])
       numClients++;
     }
     for (i = 0; i < numClients; i++) {
-      int ch;
-      if (-1 != (ch = non_blocking_fgetc(client_sockets[i]))) {
+      FILE sok = client_sockets[i];
+      /* note the while means we'll read all that one chat has to say
+       * to prevent interleaving messages */
+      while (1 == 1) {
+        int ch = non_blocking_fgetc(sok);
+        if (FGETC_ERRNO == ch) {
+          if (-1 == close(sok)) {
+            printf("Unable to close socket[%d]\n", i);
+          }
+          drop_client(i);
+        } else if (-1 == ch) {
+          break;
+        }
         buffer[ buf_len ] = ch;
         buf_len++;
-        if (buf_len > sizeof(buffer) || '\n' == ch) {
+        if (buf_len >= sizeof(buffer) || '\n' == ch) {
+          printf("broadcasting...\n");
           broadcast();
           buf_len = 0;
         }
@@ -98,7 +119,7 @@ void broadcast()
           i, buf_len, bytesWritten);
       /* attempt to free the resources */
       if (-1 == close(client_fd)) {
-        printf("Unable to close socket %d\n", i);
+        printf("Unable to close socket[%d]\n", i);
       }
       drop_client(i);
     }
@@ -118,16 +139,26 @@ void drop_client(int clientNum)
   }
 }
 
+int non_blocking_fgetc2(FILE fd, short negativeIsError);
+
 int non_blocking_getchar()
 {
-  return non_blocking_fgetc(stdin);
+  return non_blocking_fgetc2(stdin, 0);
 }
 
 int non_blocking_fgetc(FILE fd)
 {
-  int ch;
-  if (1 == read(fd, &ch, 1)) {
-    return ch;
+  return non_blocking_fgetc2(stdin, 1);
+}
+
+static int _fgetc_ch;
+int non_blocking_fgetc2(FILE fd, short negativeIsError)
+{
+  int br;
+  if (1 == (br = read(fd, &_fgetc_ch, 1))) {
+    return _fgetc_ch;
+  } else if (-1 == br && negativeIsError) {
+    return FGETC_ERRNO; /* yea, C! */
   } else {
     return -1;
   }
