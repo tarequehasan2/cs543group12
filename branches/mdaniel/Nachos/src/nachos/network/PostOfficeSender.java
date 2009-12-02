@@ -44,16 +44,16 @@ public class PostOfficeSender implements Runnable {
 			for (SocketKey socketKey : sendBuffer.keySet()){
 				if (!sendBuffer.get(socketKey).isEmpty() && unackedBuffer.get(socketKey).size() < SEND_WINDOW){
 					NachosMessage message = sendBuffer.get(socketKey).removeFirst();
-					if (Integer.MIN_VALUE == message.getSequence()) {
+					if (! message.isSequenceSet()) {
 						if (! currentSeqNum.containsKey(socketKey)) {
-							currentSeqNum.put(socketKey, 0);
+							currentSeqNum.put(socketKey, 1);
 						}
                         int seq = currentSeqNum.get(socketKey);
                         message.setSequence(seq);
                         seq++;
                         currentSeqNum.put(socketKey, seq);
 					}
-					
+
 					postOffice.send(message);
 					if (!message.isACK()){
 						if (unackedBuffer.containsKey(socketKey)){
