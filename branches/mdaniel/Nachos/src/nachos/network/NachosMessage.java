@@ -242,6 +242,14 @@ public class NachosMessage
         _seq = seq;
     }
 
+    /**
+     * Returns true iff a sequence value has been provided for this message.
+     * @return true iff a sequence value has been provided for this message.
+     */
+    public boolean isSequenceSet() {
+        return Integer.MIN_VALUE != _seq;
+    }
+
     public byte[] getPayload() {
         return _payload;
     }
@@ -287,6 +295,9 @@ public class NachosMessage
     }
 
     private Packet createPacket() throws MalformedPacketException {
+        if (! isSequenceSet()) {
+            throw new IllegalStateException("No SEQ set for this message");
+        }
         byte[] pContents = new byte[ HEADER_SIZE + _payload.length ];
         pContents[0] = (byte)(_dstPort & 0xFF);
         pContents[1] = (byte)(_srcPort & 0xFF);
