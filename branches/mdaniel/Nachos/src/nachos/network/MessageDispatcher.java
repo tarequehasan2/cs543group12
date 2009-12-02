@@ -8,7 +8,6 @@ import java.util.Map;
 import nachos.machine.Lib;
 import nachos.machine.Machine;
 import nachos.machine.MalformedPacketException;
-import nachos.machine.NetworkLink;
 import nachos.threads.Condition;
 import nachos.threads.Lock;
 
@@ -45,8 +44,9 @@ public class MessageDispatcher {
     public void dispatch(NachosMessage msg) {
         final SocketEvent evt = SocketEvent.getEvent(msg);
         final SocketKey key = new SocketKey(msg);
+        final SocketState sockState = getSocketState(key);
         if (SocketEvent.DATA == evt) {
-            if (getSocketState(key) != SocketState.ESTABLISHED) {
+            if (sockState != SocketState.ESTABLISHED) {
                 debug("DROPPING new DATA due to not in ESTABLISHED condition");
                 return;
             }
@@ -59,12 +59,21 @@ public class MessageDispatcher {
                 }
             }
         } else if (SocketEvent.SYN == evt) {
-            if (getSocketState(key) != SocketState.CLOSED) {
-                error("Trying to SYN a non-CLOSED port?!");
+            if (sockState == SocketState.SYN_RCVD) {
+                error("DROPPING extraneous SYN; hold your damn horses");
                 return;
             }
-            if (getSocketState(key) == SocketState.SYN_RCVD) {
-                error("DROPPING extraneous SYN; hold your damn horses");
+            if (sockState == SocketState.ESTABLISHED) {
+                try {
+                    _sender.send( NachosMessage.ackSyn(msg) );
+                } catch (MalformedPacketException e) {
+                    e.printStackTrace(System.err);
+                    Lib.assertNotReached(e.getMessage());
+                }
+                return;
+            }
+            if (sockState != SocketState.CLOSED) {
+                error("Trying to SYN a non-CLOSED ("+ sockState +") port?!");
                 return;
             }
             // hang on to this, because we're going to have to SYN/ACK it
@@ -77,7 +86,7 @@ public class MessageDispatcher {
             // SYNACKs don't need an ACK to be transmitted,
             // the flow of data will be their ACK
             Lib.assertTrue(SocketState.SYN_SENT ==
-                    getSocketState(key),
+                    sockState,
                     "Protocol Error; expected SYN_SENT for SYNACK");
             Condition cond = _connectConds.get(key);
             Lock lck = _condLocks.get(cond);
@@ -294,12 +303,17 @@ public class MessageDispatcher {
     }
 
     private void error(String msg) {
-        System.err.println("ERROR:" + NetworkLink.networkID + "::" + msg);
+        final int address = Machine.networkLink().getLinkAddress();
+        final String s = "MessageDispatch::ERROR:"
+                + address + "::" + msg;
+        Lib.debug('n', s);
     }
 
     private void debug(String msg) {
-        System.err.println("MessageDispatch::DEBUG:"
-                + NetworkLink.networkID + "::" + msg);
+        final int address = Machine.networkLink().getLinkAddress();
+        final String s = "MessageDispatch::DEBUG:"
+                + address + "::" + msg;
+        Lib.debug('n', s);
     }
 
     /**

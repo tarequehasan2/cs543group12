@@ -51,30 +51,30 @@ public class SocketOpenFile extends OpenFile
     /** Always returns -1, because I do not support seeked reads. */
     @Override
     public int read(int pos, byte[] buf, int offset, int length) {
-        return -1;
+        throw new UnsupportedOperationException("no seeked reads");
     }
 
     /** Always returns -1, because I do not support seeked writes. */
     @Override
     public int write(int pos, byte[] buf, int offset, int length) {
-        return -1;
+        throw new UnsupportedOperationException("no seeked writes");
     }
 
     /** Always returns -1, because I do not support length calls. */
     @Override
     public int length() {
-        return -1;
+        throw new UnsupportedOperationException("no length()");
     }
 
     /** Always returns -1, because I do not support telling position. */
     @Override
     public int tell() {
-        return -1;
+        throw new UnsupportedOperationException("no tell()");
     }
 
-    /** Always returns -1, because I do not support seeking. */
     @Override
     public void seek(int pos) {
+        throw new UnsupportedOperationException("no seek("+pos+")");
     }
 
     SocketKey getKey() {

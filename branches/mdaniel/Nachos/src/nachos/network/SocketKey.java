@@ -1,9 +1,5 @@
 package nachos.network;
 
-import nachos.machine.Machine;
-
-// import nachos.machine.Machine;
-
 public class SocketKey {
 	private int sourceHost, sourcePort, destHost, destPort;
 
@@ -22,7 +18,7 @@ public class SocketKey {
 	}
 
 	SocketKey(NachosMessage message, boolean reverse){
-		this(message);		
+		this(message);
 		if (reverse){
 			this.destHost = message.getSourceHost();
 			this.destPort = message.getSourcePort();
@@ -30,8 +26,8 @@ public class SocketKey {
 			this.sourcePort = message.getDestPort();
 		}
 	}
-	
-	
+
+
 	public int getSourceHost() {
 		return sourceHost;
 	}
@@ -44,6 +40,14 @@ public class SocketKey {
 	public int getDestPort() {
 		return destPort;
 	}
+
+    /**
+     * Returns the inverse of this SocketKey.
+     * @return the inverse of this SocketKey.
+     */
+    public SocketKey reverse() {
+        return new SocketKey(destHost, destPort, sourceHost, sourcePort);
+    }
 
 	@Override
 	public int hashCode() {

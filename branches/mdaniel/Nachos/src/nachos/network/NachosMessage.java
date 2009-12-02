@@ -155,19 +155,12 @@ public class NachosMessage
         _dstPort = dstPort;
         _srcHost = srcLink;
         _srcPort = srcPort;
-        _payload = contents;
-        _seq = -1;
-        byte[] pContents = new byte[ _payload.length + HEADER_SIZE ];
-        pContents[0] = (byte)(dstPort & 0xFF);
-        pContents[1] = (byte)(srcPort & 0xFF);
-        pContents[2] = (byte)0; // MBZ-HI
-        // ensure only our flags appear in MBZ-LO
-        pContents[3] = (byte)((ACK|FIN|STP|SYN) & flags); // MBZ-LO
         initializeFlags(flags);
-        writeSequence(pContents, 4, _seq);
-        // load in the data
-        System.arraycopy(contents, 0, pContents, HEADER_SIZE, contents.length);
-        _packet = new Packet(dstLink, srcLink, pContents);
+        // clone their byte array since in Java, arrays are live
+        byte[] tmp = new byte[ contents.length ];
+        System.arraycopy(contents, 0, tmp, 0, tmp.length );
+        _payload = tmp;
+        _seq = Integer.MIN_VALUE;
     }
 
     /**
@@ -181,13 +174,13 @@ public class NachosMessage
         if (raw.contents.length < HEADER_SIZE) {
             throw new MalformedPacketException();
         }
-        System.err.print("PACKET(");
-        for (byte b : raw.packetBytes) {
-            System.err.print(Integer.toHexString(b & 0xFF));
-            System.err.print(' ');
-        }
-        System.err.println(")");
-        System.err.flush();
+//        System.err.print("PACKET(");
+//        for (byte b : raw.packetBytes) {
+//            System.err.print(Integer.toHexString(b & 0xFF));
+//            System.err.print(' ');
+//        }
+//        System.err.println(")");
+//        System.err.flush();
         // dport sport mbzhi mbzlo seq[4] dat dat dat
         final int dataOffset = HEADER_SIZE;
         _payload = new byte[ raw.contents.length - dataOffset ];
@@ -247,16 +240,14 @@ public class NachosMessage
 
     public void setSequence(int seq) {
         _seq = seq;
-        writeSequence(_packet.contents, 4, _seq);
-        writeSequence(_packet.packetBytes, 8, _seq);
     }
 
     public byte[] getPayload() {
         return _payload;
     }
 
-    public Packet toPacket() {
-        return _packet;
+    public Packet toPacket() throws MalformedPacketException {
+        return createPacket();
     }
 
     @Override
@@ -295,6 +286,27 @@ public class NachosMessage
         bytes[offset + 3] = (byte)((seq      ) & 0xFF);
     }
 
+    private Packet createPacket() throws MalformedPacketException {
+        byte[] pContents = new byte[ HEADER_SIZE + _payload.length ];
+        pContents[0] = (byte)(_dstPort & 0xFF);
+        pContents[1] = (byte)(_srcPort & 0xFF);
+        pContents[2] = (byte)0; // MBZ-HI
+        pContents[3] = makeMbzLo();
+        writeSequence(pContents, 4, _seq);
+        // load in the data
+        System.arraycopy(_payload, 0, pContents, HEADER_SIZE, _payload.length);
+        return new Packet(_dstHost, _srcHost, pContents);
+    }
+
+    private byte makeMbzLo() {
+        return (byte)(
+                 (isACK() ? ACK : 0)
+                |(isFIN() ? FIN : 0)
+                |(isSTP() ? STP : 0)
+                |(isSYN() ? SYN : 0)
+                );
+    }
+
     private byte[] _payload;
     private boolean _ack;
     private boolean _fin;
@@ -305,5 +317,5 @@ public class NachosMessage
     private int _srcPort;
     private int _dstHost;
     private int _dstPort;
-    private Packet _packet;
+//    private Packet _packet;
 }
