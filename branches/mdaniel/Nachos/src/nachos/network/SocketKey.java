@@ -1,6 +1,6 @@
 package nachos.network;
 
-public class SocketKey {
+public class SocketKey implements Cloneable{
 	private int sourceHost, sourcePort, destHost, destPort;
 
     SocketKey (int sourceHost, int sourcePort, int destHost, int destPort){
@@ -27,6 +27,20 @@ public class SocketKey {
 		}
 	}
 
+	public static SocketKey reverse (SocketKey thisKey){
+		SocketKey result = null;
+		try {
+			result = (SocketKey) thisKey.clone();
+			result.destHost = thisKey.sourceHost;
+			result.sourceHost = thisKey.destHost;
+			result.destPort = thisKey.sourcePort;
+			result.sourcePort = thisKey.destPort;
+		} catch (CloneNotSupportedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		return result;
+	}
 
 	public int getSourceHost() {
 		return sourceHost;
