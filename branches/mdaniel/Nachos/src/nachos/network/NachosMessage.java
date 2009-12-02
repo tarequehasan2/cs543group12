@@ -98,7 +98,8 @@ public class NachosMessage
      */
     public static NachosMessage shorten(NachosMessage msg, int bytes) {
         byte[] tmp = new byte[ bytes ];
-        System.arraycopy(msg._payload, bytes, tmp, 0, tmp.length );
+        final int startAt = msg._payload.length - bytes;
+        System.arraycopy(msg._payload, startAt, tmp, 0, tmp.length );
         msg._payload = tmp;
         return msg;
     }
@@ -269,7 +270,18 @@ public class NachosMessage
                 (isSYN() ? " SYN" : "") +
                 " SEQ="+getSequence() +
                 " SIZE="+_payload.length +
+                " DATA="+payloadString() +
                 ']';
+    }
+
+    private String payloadString() {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : _payload) {
+            if (b < 0xF) sb.append('0');
+            sb.append(Integer.toHexString(b & 0xFF));
+            sb.append(' ');
+        }
+        return sb.toString();
     }
 
     private void initializeFlags(byte mbzLo) {

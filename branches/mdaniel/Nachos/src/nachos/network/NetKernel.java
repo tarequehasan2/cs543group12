@@ -143,6 +143,7 @@ public class NetKernel extends VMKernel
 
     public int write(SocketKey key,
                       byte[] data, int offset, int len) {
+        key = key.reverse();
         final int destHost = key.getDestHost();
         final int destPort = key.getDestPort();
         final int srcPort = key.getSourcePort();
@@ -152,11 +153,12 @@ public class NetKernel extends VMKernel
         // compose up to NachosMessage.MAX_CONTENTS_LENGTH chunk, and tack it
         // into the outgoing queue for the given (host,port) tuple
         final int realLen = len - offset;
+        debug(qualifier+":write.realLen = "+realLen);
         for (int i = 0; i < realLen; /*empty*/ ) {
-            byte[] contents = new byte[
-                    Math.min(realLen, NachosMessage.MAX_CONTENTS_LENGTH) ];
+            byte[] contents = new byte[ realLen ];
+            System.arraycopy(data, i, contents, 0, realLen );
+            // set up for the next iteration
             i += contents.length;
-            System.arraycopy(data, i, contents, 0, contents.length );
             NachosMessage datagram;
             try {
                 datagram = new NachosMessage(destHost, destPort, srcHost, srcPort,
