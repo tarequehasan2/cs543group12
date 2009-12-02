@@ -55,7 +55,7 @@ int main(int argc, char* argv[])
   out_pos = 0;
 
   do {
-    bytesRead = read(sock, &in_buffer, 1);
+    bytesRead = read(sock, in_buffer + in_pos, 1);
     if (-1 != bytesRead) {
       /* process chatserver input */
       in_pos++;
