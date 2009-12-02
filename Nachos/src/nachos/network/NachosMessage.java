@@ -219,6 +219,13 @@ public class NachosMessage
         return _dstPort;
     }
 
+    public void setFromKey (SocketKey key){
+    	_srcHost = key.getSourceHost();
+    	_srcPort = key.getSourcePort();
+    	_dstHost = key.getDestHost();
+    	_dstPort = key.getDestPort();
+    }
+    
     public boolean isACK() {
         return _ack;
     }

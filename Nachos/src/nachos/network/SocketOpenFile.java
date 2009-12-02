@@ -46,11 +46,7 @@ public class SocketOpenFile extends OpenFile
      */
     @Override
     public int write(byte[] buf, int offset, int length) {
-    	if (_key.getSourceHost() != Machine.networkLink().getLinkAddress()){
     		return _kernel.write(_key, buf, offset, length);
-    	}else{
-    		return _kernel.write(SocketKey.reverse(_key), buf, offset, length);
-    	}
     }
 
     /** Always returns -1, because I do not support seeked reads. */
