@@ -41,8 +41,13 @@ int main(int argc, char* argv[])
 
   numClients = 0; /* explicitly initialize it */
   buf_len = 0; /* explicitly initialize it */
-
+	int busy;
+	int j;
   do {
+  busy = 0;
+  	for (j = 0; j < 100; j++){
+  	    busy++;
+  	} 
     if (-1 == (sock = accept(CHAT_PORT))) {
       /* no client? check for charpress on stdin */
       if (-1 != non_blocking_getchar()) {
