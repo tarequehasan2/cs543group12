@@ -45,6 +45,7 @@ public class MessageDispatcher {
         final SocketEvent evt = SocketEvent.getEvent(msg);
         final SocketKey key = new SocketKey(msg);
         final SocketState sockState = getSocketState(key);
+        debug("dispatch:\nMSG="+msg+"\nKEY="+key+"\nEVT="+evt+"\nSTAT="+sockState);
         if (SocketEvent.DATA == evt) {
             if (sockState != SocketState.ESTABLISHED) {
                 debug("DROPPING new DATA due to not in ESTABLISHED condition");
@@ -52,7 +53,7 @@ public class MessageDispatcher {
             }
             if (addToQueue(msg)) {
                 try {
-                    _sender.send(NachosMessage.ack(msg));
+                    _sender.send( NachosMessage.ack(msg) );
                 } catch (MalformedPacketException e) {
                     e.printStackTrace(System.err);
                     Lib.assertNotReached(e.getMessage());
@@ -83,6 +84,10 @@ public class MessageDispatcher {
         } else if (SocketEvent.SYNACK == evt) {
             // it's a SYN/ACK, so report that our SYN was successfully received
             _sender.ackMessage(msg);
+            if (SocketState.ESTABLISHED == sockState) {
+                // it's just a dupe; we're already up and running
+                return;
+            }
             // SYNACKs don't need an ACK to be transmitted,
             // the flow of data will be their ACK
             Lib.assertTrue(SocketState.SYN_SENT ==
