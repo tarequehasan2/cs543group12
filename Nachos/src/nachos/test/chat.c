@@ -30,16 +30,24 @@ int main(int argc, char* argv[])
   int bytesRead;
 
   if (1 == argc) {
+    const char *cp;
+    cp = argv[0];
+    cp += 5; /* c h a t - */
+   host = atoi(cp);
+/*
     printf("Usage: %s server-link-address\n", argv[0]);
     return EXIT_FAILURE;
+*/
+  } else {
+    host = atoi(argv[1]);
   }
-
-  host = atoi(argv[1]);
+  printf("connecting to (%d,%d)...\n", host, CHAT_PORT);
 
   if (-1 == (sock = connect(host, CHAT_PORT))) {
     printf("ERROR: Unable to connect(%d,%d)\n", host, CHAT_PORT);
     return EXIT_FAILURE;
   }
+  printf("connected OK\n");
 
   memset(in_buffer, 0, sizeof(in_buffer));
   in_pos = 0;
@@ -52,6 +60,7 @@ int main(int argc, char* argv[])
       /* process chatserver input */
       in_pos++;
       if ('\n' == in_buffer[in_pos - 1]) {
+        printf("server>");
         WRITE_FULLY_AND_RESET(stdout, in_buffer, in_pos);
         if (0 != in_pos) {
           /* it didn't write the whole buffer */
@@ -68,9 +77,11 @@ int main(int argc, char* argv[])
       if (2 == out_pos &&
           '.' == out_buffer[0] &&
           '\n' == out_buffer[1]) {
+        printf("EXIT CODE RECEIVED\n");
         break;
       }
       if ('\n' == out_buffer[out_pos - 1]) {
+        printf("\nTX\n");
         WRITE_FULLY_AND_RESET(sock, out_buffer, out_pos);
         if (0 != in_pos) {
           /* it didn't write the whole buffer */
@@ -80,6 +91,7 @@ int main(int argc, char* argv[])
     }
   } while (1 == 1);
 
+  printf("closing socket...\n");
   if (-1 == close(sock)) {
     printf("Unable to close socket\n");
     return EXIT_FAILURE;
