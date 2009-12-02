@@ -89,6 +89,7 @@ public class PostOffice {
             NachosMessage msg;
             try {
                 msg = new NachosMessage(p);
+                System.err.println("PostOffice::postalDelivery("+msg+")");
             } catch (MalformedPacketException e) {
                 e.printStackTrace(System.err);
                 continue;

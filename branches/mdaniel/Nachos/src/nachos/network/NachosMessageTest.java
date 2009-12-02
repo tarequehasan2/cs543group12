@@ -114,6 +114,7 @@ public class NachosMessageTest
         NachosMessage m;
         try {
             m = new NachosMessage(dHost, dPort, sHost, sPort, new byte[0]);
+            m.setSequence(0);
         } catch (MalformedPacketException e) {
             e.printStackTrace(System.err);
             assertNotReached(e.getMessage());
@@ -156,5 +157,17 @@ public class NachosMessageTest
         assertTrue(p.contents[7] == seq3,
                 "Bogus packet SEQ[3], wanted "
                         +toHexString(seq3)+", got "+toHexString(p.contents[7]));
+        assertTrue(p.packetBytes[8] == seq0,
+                "Bogus packet PACKET BYTES SEQ[0], wanted "
+                        +toHexString(seq0)+", got "+toHexString(p.packetBytes[8]));
+        assertTrue(p.packetBytes[9] == seq1,
+                "Bogus packet PACKET BYTES SEQ[1], wanted "
+                        +toHexString(seq1)+", got "+toHexString(p.packetBytes[9]));
+        assertTrue(p.packetBytes[10] == seq2,
+                "Bogus packet PACKET BYTES SEQ[2], wanted "
+                        +toHexString(seq2)+", got "+toHexString(p.packetBytes[10]));
+        assertTrue(p.packetBytes[11] == seq3,
+                "Bogus packet PACKET BYTES SEQ[3], wanted "
+                        +toHexString(seq3)+", got "+toHexString(p.packetBytes[11]));
     }
 }
