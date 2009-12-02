@@ -139,7 +139,6 @@ public class PostOfficeSender implements Runnable {
 			for (int i=0; i< messages.size(); i++){
 				NachosMessage message = messages.get(i);
 				if (unackedBufferIndicator.get(key).get(i).equals(Acked.NO)){
-					System.err.println("TIMER");
 					postOffice.send(message);
 				}
 
