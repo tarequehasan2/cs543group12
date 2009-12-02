@@ -14,8 +14,14 @@ public enum SocketEvent {
 	STP,
 	FIN,
 	FINACK;
-	
-	static SocketEvent getEvent(NachosMessage message){
+
+	static SocketEvent getEvent(NachosMessage message) {
+        if (message.isSYN() && message.isACK()){
+            return SYNACK;
+        }
+        if (message.isFIN() && message.isACK()){
+            return FINACK;
+        }
 		if (message.isACK()){
 			return ACK;
 		}
