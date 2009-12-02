@@ -14,7 +14,8 @@
      printf("ERROR: short write: wanted %d, got %d\n", \
        len, bytesWritten); \
    } else { \
-     in_pos = 0; \
+     len = 0; \
+     memset(buf, 0, sizeof(buf)); \
    } \
  } while(0 == 1);
 
@@ -83,7 +84,7 @@ int main(int argc, char* argv[])
       if ('\n' == out_buffer[out_pos - 1]) {
         printf("\nTX\n");
         WRITE_FULLY_AND_RESET(sock, out_buffer, out_pos);
-        if (0 != in_pos) {
+        if (0 != out_pos) {
           /* it didn't write the whole buffer */
           break;
         }
