@@ -161,7 +161,7 @@ public class PostOfficeSender implements Runnable {
 	 */
 	public void ackMessage(NachosMessage triggerMessage){
 		sendLock.acquire();
-		SocketKey key = new SocketKey(triggerMessage);
+		SocketKey key = new SocketKey(triggerMessage, true);
         if (! unackedBuffer.containsKey(key)) {
             sendLock.release();
             return;

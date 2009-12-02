@@ -124,6 +124,9 @@ public class NetKernel extends VMKernel
                 + "," + srcHost + "," + srcPort + ")";
 //        if (SocketState.ESTABLISHED == dispatcher.getSocketState(key.get))
         NachosMessage msg = dispatcher.nextData(key);
+        if (msg == null){
+        	return 0;
+        }
         int realLen = len - offset;
         debug(qualifier+"DATA:="+msg+",want "+realLen+" bytes of it");
         byte[] payload = msg.getPayload();
