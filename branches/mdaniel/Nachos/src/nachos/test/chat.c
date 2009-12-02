@@ -15,7 +15,6 @@
        len, bytesWritten); \
    } else { \
      len = 0; \
-     memset(buf, 0, sizeof(buf)); \
    } \
  } while(0 == 1);
 
