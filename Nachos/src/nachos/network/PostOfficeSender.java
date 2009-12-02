@@ -53,17 +53,20 @@ public class PostOfficeSender implements Runnable {
                         seq++;
                         currentSeqNum.put(socketKey, seq);
 					}
+					
 					postOffice.send(message);
-					if (unackedBuffer.containsKey(socketKey)){
-						unackedBuffer.get(socketKey).addLast(message);
-						unackedBufferIndicator.get(socketKey).addLast(Acked.NO);
-					}else{
-						LinkedList<NachosMessage> list = new LinkedList<NachosMessage>();
-						list.addLast(message);
-						unackedBuffer.put(socketKey, list);
-						LinkedList<Acked> listIndicator = new LinkedList<Acked>();
-						listIndicator.addLast(Acked.NO);
-						unackedBufferIndicator.put(socketKey, listIndicator);
+					if (!message.isACK()){
+						if (unackedBuffer.containsKey(socketKey)){
+							unackedBuffer.get(socketKey).addLast(message);
+							unackedBufferIndicator.get(socketKey).addLast(Acked.NO);
+						}else{
+							LinkedList<NachosMessage> list = new LinkedList<NachosMessage>();
+							list.addLast(message);
+							unackedBuffer.put(socketKey, list);
+							LinkedList<Acked> listIndicator = new LinkedList<Acked>();
+							listIndicator.addLast(Acked.NO);
+							unackedBufferIndicator.put(socketKey, listIndicator);
+						}
 					}
 				}
 			}
@@ -136,6 +139,7 @@ public class PostOfficeSender implements Runnable {
 			for (int i=0; i< messages.size(); i++){
 				NachosMessage message = messages.get(i);
 				if (unackedBufferIndicator.get(key).get(i).equals(Acked.NO)){
+					System.err.println("TIMER");
 					postOffice.send(message);
 				}
 
@@ -155,7 +159,7 @@ public class PostOfficeSender implements Runnable {
 	 */
 	public void ackMessage(NachosMessage triggerMessage){
 		sendLock.acquire();
-		SocketKey key = new SocketKey(triggerMessage); // .reverse();
+		SocketKey key = new SocketKey(triggerMessage,true); // .reverse();
         if (! unackedBuffer.containsKey(key)) {
             sendLock.release();
             return;
