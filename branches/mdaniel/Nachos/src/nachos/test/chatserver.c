@@ -47,18 +47,11 @@ int main(int argc, char* argv[])
 	int busy;
 	int j;
   do {
-  busy = 0;
-  	for (j = 0; j < 100; j++){
-  	    busy++;
-  	} 
     if (-1 == (sock = accept(CHAT_PORT))) {
       int ch;
       /* no client? check for charpress on stdin */
       ch = non_blocking_getchar();
-      if (FGETC_ERRNO == ch) {
-        printf("ERROR reading from stdin!\n");
-        break;
-      } else if (-1 != ch) {
+      if (! (0 == ch || -1 == ch)) {
         printf("keypress: bye, now!\n");
         break;
       }
@@ -74,20 +67,17 @@ int main(int argc, char* argv[])
        * to prevent interleaving messages */
       while (1 == 1) {
         int ch = non_blocking_fgetc(sok);
-        if (FGETC_ERRNO == ch) {
-          if (-1 == close(sok)) {
-            printf("Unable to close socket[%d]\n", i);
-          }
-          drop_client(i);
-        } else if (-1 == ch) {
+        if (0 == ch || -1 == ch) {
           break;
         }
         buffer[ buf_len ] = ch;
         buf_len++;
-        if (buf_len >= sizeof(buffer) || '\n' == ch) {
+        if (buf_len + 1 >= sizeof(buffer) || '\n' == ch) {
+          buffer[ buf_len ] = '\0';
           printf("broadcasting...\n");
           broadcast();
           buf_len = 0;
+          memset(buffer, 0, sizeof(buffer));
         }
       }
     }
@@ -103,6 +93,7 @@ void broadcast()
 {
   int i;
   int bytesWritten;
+  printf("\n\nBCAST<<%s>>\n\n", buffer);
   /* have to run backwards so we don't write to a sock twice if one fails;
    * let's consider a client_sockets of size 6:
    * observe that if sock[3] fails, and we're going up, then we'll swap
@@ -139,26 +130,17 @@ void drop_client(int clientNum)
   }
 }
 
-int non_blocking_fgetc2(FILE fd, short negativeIsError);
-
 int non_blocking_getchar()
 {
-  return non_blocking_fgetc2(stdin, 0);
-}
-
-int non_blocking_fgetc(FILE fd)
-{
-  return non_blocking_fgetc2(stdin, 1);
+  return non_blocking_fgetc(stdin);
 }
 
 static int _fgetc_ch;
-int non_blocking_fgetc2(FILE fd, short negativeIsError)
+int non_blocking_fgetc(FILE fd)
 {
   int br;
   if (1 == (br = read(fd, &_fgetc_ch, 1))) {
     return _fgetc_ch;
-  } else if (-1 == br && negativeIsError) {
-    return FGETC_ERRNO; /* yea, C! */
   } else {
     return -1;
   }
