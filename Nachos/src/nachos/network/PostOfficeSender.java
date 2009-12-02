@@ -44,21 +44,15 @@ public class PostOfficeSender implements Runnable {
 			for (SocketKey socketKey : sendBuffer.keySet()){
 				if (!sendBuffer.get(socketKey).isEmpty() && unackedBuffer.get(socketKey).size() < SEND_WINDOW){
 					NachosMessage message = sendBuffer.get(socketKey).removeFirst();
-					if (-1 == message.getSequence()) {
-						if (currentSeqNum.containsKey(socketKey)) {
-							int seq = currentSeqNum.get(socketKey);
-							message.setSequence(seq);
-							seq++;
-							currentSeqNum.put(socketKey, seq);
+					if (Integer.MIN_VALUE == message.getSequence()) {
+						if (! currentSeqNum.containsKey(socketKey)) {
+							currentSeqNum.put(socketKey, 0);
 						}
-						else {
-							int seq = 0;
-							message.setSequence(seq);
-							seq++;
-							currentSeqNum.put(socketKey, seq);
-						}
+                        int seq = currentSeqNum.get(socketKey);
+                        message.setSequence(seq);
+                        seq++;
+                        currentSeqNum.put(socketKey, seq);
 					}
-                    System.err.println("PostOfficeSender::send("+message+")");
 					postOffice.send(message);
 					if (unackedBuffer.containsKey(socketKey)){
 						unackedBuffer.get(socketKey).addLast(message);
@@ -109,7 +103,7 @@ public class PostOfficeSender implements Runnable {
 	 */
 	public void send(NachosMessage message){
 		sendLock.acquire();
-		SocketKey key = new SocketKey(message);
+		SocketKey key = new SocketKey(message).reverse();
         if (stopInEffect.containsKey(key)) {
             sendLock.release();
             return;
@@ -161,23 +155,24 @@ public class PostOfficeSender implements Runnable {
 	 */
 	public void ackMessage(NachosMessage triggerMessage){
 		sendLock.acquire();
-		SocketKey key = new SocketKey(triggerMessage, true);
+		SocketKey key = new SocketKey(triggerMessage); // .reverse();
         if (! unackedBuffer.containsKey(key)) {
             sendLock.release();
             return;
         }
 		LinkedList<NachosMessage> nachosMessages= unackedBuffer.get(key);
-		for (int i = 0; i < nachosMessages.size(); i++){
+        final LinkedList<Acked> ackeds = unackedBufferIndicator.get(key);
+        for (int i = 0; i < nachosMessages.size(); i++){
 			NachosMessage message = nachosMessages.get(i);
 			if (message.getSequence() == triggerMessage.getSequence()){
-				unackedBufferIndicator.get(key).set(i, Acked.YES);
+				ackeds.set(i, Acked.YES);
 			}
 		}
 
 		//slide window if necessary to allow more messages to flow.
 
-		while (unackedBufferIndicator.get(key).getFirst().equals(Acked.YES)) {
-			unackedBufferIndicator.get(key).removeFirst();
+		while (ackeds.isEmpty() && ackeds.getFirst().equals(Acked.YES)) {
+			ackeds.removeFirst();
 			unackedBuffer.get(key).removeFirst();
 		}
 

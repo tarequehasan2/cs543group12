@@ -110,11 +110,12 @@ public class NachosMessageTest
         final int dPort = 15;
         final int sHost = 0;
         final int sPort = 25;
+        final int theSeq = new java.util.Random().nextInt();
 
         NachosMessage m;
         try {
             m = new NachosMessage(dHost, dPort, sHost, sPort, new byte[0]);
-            m.setSequence(0);
+            m.setSequence(theSeq);
         } catch (MalformedPacketException e) {
             e.printStackTrace(System.err);
             assertNotReached(e.getMessage());
@@ -131,7 +132,14 @@ public class NachosMessageTest
         assertTrue( !m.isFIN(), "FIN?!");
         assertTrue( !m.isSTP(), "STP?!");
         assertTrue( !m.isSYN(), "SYN?!");
-        Packet p = m.toPacket();
+        Packet p;
+        try {
+            p = m.toPacket();
+        } catch (MalformedPacketException e) {
+            e.printStackTrace(System.err);
+            assertNotReached(e.getMessage());
+            throw new Error(); // won't reach this
+        }
         assertTrue(null != p, "NULL PACKET?!");
         assertTrue(p.srcLink == sHost, "Bogus packet src");
         assertTrue(p.dstLink == dHost, "Bogus packet dest");
@@ -141,6 +149,7 @@ public class NachosMessageTest
         assertTrue(p.contents[2] == 0, "Bogus packet MBZ-HI");
         assertTrue(p.contents[3] == 0, "Bogus packet MBZ-LO");
         int seq = m.getSequence();
+        assertTrue(theSeq == seq, "Wrong sequence getter");
         final byte seq0 = (byte)((seq >> 24) & 0xFF);
         final byte seq1 = (byte)((seq >> 16) & 0xFF);
         final byte seq2 = (byte)((seq >>  8) & 0xFF);

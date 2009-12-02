@@ -3,7 +3,6 @@ package nachos.network;
 import nachos.machine.Lib;
 import nachos.machine.Machine;
 import nachos.machine.MalformedPacketException;
-import nachos.machine.NetworkLink;
 import nachos.machine.Packet;
 import nachos.threads.KThread;
 import nachos.threads.Lock;
@@ -89,7 +88,7 @@ public class PostOffice {
             NachosMessage msg;
             try {
                 msg = new NachosMessage(p);
-                System.err.println("PostOffice::postalDelivery("+msg+")");
+                debug("postalDelivery("+msg+")");
             } catch (MalformedPacketException e) {
                 e.printStackTrace(System.err);
                 continue;
@@ -115,8 +114,12 @@ public class PostOffice {
 
         sendLock.acquire();
 
-        Machine.networkLink().send(mail.toPacket());
-        messageSent.P();
+        try {
+            Machine.networkLink().send(mail.toPacket());
+            messageSent.P();
+        } catch (MalformedPacketException e) {
+            e.printStackTrace(System.err);
+        }
 
         sendLock.release();
     }
@@ -131,11 +134,11 @@ public class PostOffice {
     }
 
 //    private void error(String msg) {
-//        System.err.println("ERROR:"+NetworkLink.networkID+"::"+msg);
+//        System.err.println("ERROR:HOST["+Machine.networkLink().getLinkAddress()+"]::"+msg);
 //    }
 
     private void debug(String msg) {
-        Lib.debug(dbgNet, "DEBUG:"+NetworkLink.networkID+"::"+msg);
+        Lib.debug(dbgNet, "DEBUG:HOST["+Machine.networkLink().getLinkAddress()+"]::"+msg);
     }
 
 //    private SynchList[] dataQueues;
