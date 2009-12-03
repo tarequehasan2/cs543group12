@@ -18,9 +18,9 @@
    } \
  } while(0 == 1);
 
-static char in_buffer[1024];
+static char in_buffer[128];
 static int  in_pos;
-static char out_buffer[1024];
+static char out_buffer[128];
 static int  out_pos;
 
 int main(int argc, char* argv[])
@@ -30,6 +30,7 @@ int main(int argc, char* argv[])
   int bytesRead;
 
   if (1 == argc) {
+/* this is a hack to allow us to run it from the -x with Nachos */
     const char *cp;
     cp = argv[0];
     cp += 5; /* c h a t - */
@@ -65,7 +66,7 @@ int main(int argc, char* argv[])
         WRITE_FULLY_AND_RESET(stdout, in_buffer, in_pos);
         if (0 != in_pos) {
           /* it didn't write the whole buffer */
-          break;
+          goto cleanup;
         }
       }
     }
@@ -80,19 +81,19 @@ int main(int argc, char* argv[])
           '.' == out_buffer[0] &&
           '\n' == out_buffer[1]) {
         printf("EXIT CODE RECEIVED\n");
-        break;
+        goto cleanup;
       }
       if ('\n' == out_buffer[out_pos - 1]) {
-        printf("\nTX\n");
         WRITE_FULLY_AND_RESET(sock, out_buffer, out_pos);
         if (0 != out_pos) {
           /* it didn't write the whole buffer */
-          break;
+          goto cleanup;
         }
       }
     }
   } while (1 == 1);
 
+cleanup:
   printf("closing socket...\n");
   if (-1 == close(sock)) {
     printf("Unable to close socket\n");
