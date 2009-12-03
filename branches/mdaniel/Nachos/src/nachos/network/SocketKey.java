@@ -52,10 +52,8 @@ public class SocketKey {
 	public int hashCode() {
 		final int prime = 31;
 		int result = 1;
-		result = prime * result + destHost;
-		result = prime * result + destPort;
-		result = prime * result + sourceHost;
-		result = prime * result + sourcePort;
+		result = prime * result + (destHost + sourceHost);
+		result = prime * result + (destPort + sourcePort);
 		return result;
 	}
 
@@ -68,10 +66,8 @@ public class SocketKey {
 		if (getClass() != obj.getClass())
 			return false;
 		SocketKey other = (SocketKey) obj;
-        return destHost == other.destHost &&
-               destPort == other.destPort &&
-               sourceHost == other.sourceHost &&
-               sourcePort == other.sourcePort;
+        return (destHost + sourceHost) == (other.destHost) + (other.sourceHost) &&
+               (destPort + sourcePort) == (other.destPort) + (other.sourcePort);
     }
 
     @Override
