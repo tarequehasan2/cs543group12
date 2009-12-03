@@ -28,11 +28,13 @@ public class NetKernel extends VMKernel
         _acceptPids = new java.util.HashMap<Integer, Integer>();
         PostOffice post = new PostOffice();
         postOfficeSender = new PostOfficeSender(post);
-        dispatcher = new MessageDispatcher(/* post, */ postOfficeSender);
+        dispatcher = new MessageDispatcher(postOfficeSender);
         new KThread(postOfficeSender)
-                .setName("PostOfficeSender").fork();
+                .setName("PostOfficeSender")
+                .fork();
         new KThread(new TimerEventHandler(postOfficeSender, dispatcher))
-                .setName("TimerEvent").fork();
+                .setName("TimerEvent")
+                .fork();
     }
 
     /**
@@ -72,7 +74,7 @@ public class NetKernel extends VMKernel
     }
 
     public void dispatch(NachosMessage msg) {
-        debug("dispatch "+msg);
+//        debug("dispatch "+msg);
         dispatcher.dispatch(msg);
     }
 
@@ -89,12 +91,14 @@ public class NetKernel extends VMKernel
             error("Attempt to double-accept on port "+port
                     +"; conflicts with PID "+_acceptPids.get(port));
             _acceptLock.release();
+            KThread.yield();
             return null;
         } else {
             _acceptPids.put(port, currentPid);
             _acceptLock.release();
         }
         if (! dispatcher.isInSynReceivedState(port)) {
+            KThread.yield();
             return null;
         }
         return dispatcher.accept(port);
@@ -115,24 +119,24 @@ public class NetKernel extends VMKernel
      */
     public int read(SocketKey key,
                       byte[] data, int offset, int len) {
-        final int destHost = key.getDestHost();
-        final int destPort = key.getDestPort();
-        final int srcPort = key.getSourcePort();
-        final int srcHost = key.getSourceHost();
-        final String qualifier = "(" + destHost + "," + destPort
-                + "," + srcHost + "," + srcPort + ")";
-//        if (SocketState.ESTABLISHED == dispatcher.getSocketState(key.get))
+//        final int destHost = key.getDestHost();
+//        final int destPort = key.getDestPort();
+//        final int srcPort = key.getSourcePort();
+//        final int srcHost = key.getSourceHost();
+//        final String qualifier = "(" + destHost + "," + destPort
+//                + "," + srcHost + "," + srcPort + ")";
         NachosMessage msg = dispatcher.nextData(key);
-        if (msg == null){
+        if (msg == null) {
+            KThread.yield();
         	return 0;
         }
         int realLen = len - offset;
-        debug(qualifier+"DATA:="+msg+",want "+realLen+" bytes of it");
+//        debug(qualifier+"DATA:="+msg+",want "+realLen+" bytes of it");
         byte[] payload = msg.getPayload();
         Lib.assertTrue(null != payload, "Egad, null payload?");
         if (payload.length > realLen) {
             final int pushbackBytes = payload.length - realLen;
-            debug(qualifier+"pushing back "+pushbackBytes);
+//            debug(qualifier+"pushing back "+pushbackBytes);
             dispatcher.pushBack(msg, pushbackBytes);
         }
         final int numBytes = Math.min(payload.length, realLen);
@@ -142,20 +146,25 @@ public class NetKernel extends VMKernel
 
     public int write(SocketKey key,
                       byte[] data, int offset, int len) {
-        key = key.reverse();
-        final int destHost = key.getDestHost();
-        final int destPort = key.getDestPort();
-        final int srcPort = key.getSourcePort();
-        final int srcHost = key.getSourceHost();
+        final int srcHost = key.getDestHost();
+        final int srcPort = key.getDestPort();
+        final int destPort = key.getSourcePort();
+        final int destHost = key.getSourceHost();
         final String qualifier = "D(" + destHost + "," + destPort
                 + "),S(" + srcHost + "," + srcPort + ")";
+        // FIXME: chunking
         // compose up to NachosMessage.MAX_CONTENTS_LENGTH chunk, and tack it
         // into the outgoing queue for the given (host,port) tuple
         final int realLen = len - offset;
         debug(qualifier+":write.realLen = "+realLen);
         for (int i = 0; i < realLen; /*empty*/ ) {
-            byte[] contents = new byte[ realLen ];
-            System.arraycopy(data, i, contents, 0, realLen );
+            /// they may want to send 100,000 bytes, but we're only going to
+            /// do so MAX_CONTENTS_LENGTH at a time
+            int bytesRemaining = realLen - i;
+            int packetSize = Math.min( bytesRemaining,
+                                       NachosMessage.MAX_CONTENTS_LENGTH );
+            byte[] contents = new byte[ packetSize ];
+            System.arraycopy(data, i, contents, 0, contents.length);
             // set up for the next iteration
             i += contents.length;
             NachosMessage datagram;
@@ -177,7 +186,7 @@ public class NetKernel extends VMKernel
     }
 
     private void debug(String msg) {
-        Lib.debug(dbgFlag, msg);
+        Lib.debug(dbgFlag, "DEBUG:NetKernel::"+msg);
     }
 
     /** Protects {@link #_acceptPids}. */
