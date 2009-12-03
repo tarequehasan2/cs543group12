@@ -172,9 +172,7 @@ public class PostOfficeSender implements Runnable {
         Lib.assertTrue(
                 Machine.networkLink().getLinkAddress() == triggerMessage.getDestHost(),
                 "Why are you sending me someone else's messages?");
-        /// we have to reverse this because
-        /// we constructed the key based on the OUTGOING tuple
-		SocketKey key = new SocketKey(triggerMessage).reverse();
+		SocketKey key = new SocketKey(triggerMessage);
         if (! unackedBuffer.containsKey(key)) {
             System.err.println(
                     "\n\nERROR:UNABLE to ACK a Message I don't own: "+triggerMessage);
