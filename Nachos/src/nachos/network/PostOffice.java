@@ -88,7 +88,6 @@ public class PostOffice {
             NachosMessage msg;
             try {
                 msg = new NachosMessage(p);
-                debug("postalDelivery("+msg+")");
             } catch (MalformedPacketException e) {
                 e.printStackTrace(System.err);
                 continue;
@@ -110,19 +109,19 @@ public class PostOffice {
      * Send a message to a mailbox on a remote machine.
      */
     public void send(NachosMessage mail) {
-        debug("sending mail: " + mail);
-
         sendLock.acquire();
 
         try {
 
             Machine.networkLink().send(mail.toPacket());
+            debug("[SENT]\n" + mail);
             messageSent.P();
         } catch (MalformedPacketException e) {
             e.printStackTrace(System.err);
         }
 
         sendLock.release();
+        KThread.yield();
     }
 
     /**

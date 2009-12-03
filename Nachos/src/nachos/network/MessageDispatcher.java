@@ -14,8 +14,7 @@ import nachos.threads.Lock;
 public class MessageDispatcher {
     public final int RECV_WINDOW = 16;
 
-    public MessageDispatcher(/*PostOffice post, */ PostOfficeSender sender) {
-//        _post = post;
+    public MessageDispatcher(PostOfficeSender sender) {
         _sender = sender;
         _states = new HashMap<SocketKey, SocketState>();
         _queues = new HashMap<SocketKey, List<NachosMessage>>();
@@ -45,7 +44,7 @@ public class MessageDispatcher {
         final SocketEvent evt = SocketEvent.getEvent(msg);
         final SocketKey key = new SocketKey(msg);
         final SocketState sockState = getSocketState(key);
-        debug("\n\nRECEIVE:\nMSG="+msg+"\nKEY="+key+"\nEVT="+evt+"\nSTAT="+sockState);
+        debug("[RECEIVE]\n\tMSG="+msg+"\n\tKEY="+key+"\n\tEVT="+evt+"\n\tSTAT="+sockState);
         if (SocketEvent.DATA == evt) {
             if (sockState != SocketState.ESTABLISHED) {
                 debug("DROPPING new DATA due to not in ESTABLISHED condition");
@@ -58,6 +57,8 @@ public class MessageDispatcher {
                     e.printStackTrace(System.err);
                     Lib.assertNotReached(e.getMessage());
                 }
+            } else {
+                error("Full RECV window; dropping "+msg);
             }
         } else if (SocketEvent.SYN == evt) {
             if (sockState == SocketState.SYN_RCVD) {
@@ -122,7 +123,7 @@ public class MessageDispatcher {
                 e.printStackTrace(System.err);
                 Lib.assertNotReached(e.getMessage());
             }
-            setSocketState(key, SocketState.CLOSING);
+            setSocketState(key, SocketState.CLOSED);
         } else if (SocketEvent.FINACK == evt) {
             // tell the sender to clean up resources for that connection
             _sender.close(key);
@@ -234,6 +235,10 @@ public class MessageDispatcher {
     }
 
     public void close(SocketKey key) {
+        if (getSocketState(key) == SocketState.CLOSED) {
+            // they've already left, no need to inform them
+            return;
+        }
         final int destHost = key.getSourceHost();
         final int destPort = key.getSourcePort();
         final int srcHost = key.getDestHost();
@@ -336,14 +341,14 @@ public class MessageDispatcher {
 
     private void error(String msg) {
         final int address = Machine.networkLink().getLinkAddress();
-        final String s = "MessageDispatch::ERROR:"
+        final String s = "ERROR:MessageDispatch@"
                 + address + "::" + msg;
         Lib.debug('n', s);
     }
 
     private void debug(String msg) {
         final int address = Machine.networkLink().getLinkAddress();
-        final String s = "MessageDispatch::DEBUG:"
+        final String s = "DEBUG:MessageDispatch@"
                 + address + "::" + msg;
         Lib.debug('n', s);
     }
@@ -365,5 +370,4 @@ public class MessageDispatcher {
      */
     private Map<SocketKey, List<NachosMessage>> _queues;
     private PostOfficeSender _sender;
-//    private PostOffice _post;
 }
