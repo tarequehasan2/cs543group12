@@ -110,9 +110,6 @@ public class PostOffice {
      * Send a message to a mailbox on a remote machine.
      */
     public void send(NachosMessage mail) {
-    	SocketKey key = new SocketKey(mail).reverse();
-    		if (mail.getSourceHost() != Machine.networkLink().getLinkAddress() )
-    		mail.setFromKey(key);
         debug("sending mail: " + mail);
 
         sendLock.acquire();
