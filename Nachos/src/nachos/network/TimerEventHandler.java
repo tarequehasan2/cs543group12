@@ -5,18 +5,20 @@ public class TimerEventHandler implements Runnable{
 
 	private PostOfficeSender pos;
 	private static final long TICKS = 20000L;
-	TimerEventHandler(PostOfficeSender pos){
+	TimerEventHandler(PostOfficeSender pos, MessageDispatcher dispatcher){
 		this.pos = pos;
+        this.dispatcher = dispatcher;
 	}
-	
+
 	private static boolean running = true;
 	@Override
-	public void run() {		
+	public void run() {
 		while (running){
 			NetKernel.alarm.waitUntil(TICKS);
 			pos.resendAllUnacked();
+            dispatcher.clearClosingStates();
 		}
-		
+
 	}
 
 	/**
@@ -26,4 +28,5 @@ public class TimerEventHandler implements Runnable{
 		running = false;
 	}
 
+    private MessageDispatcher dispatcher;
 }

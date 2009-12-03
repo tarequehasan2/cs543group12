@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import nachos.machine.Lib;
+import nachos.machine.Machine;
 import nachos.threads.KThread;
 import nachos.threads.Lock;
 
@@ -106,8 +108,16 @@ public class PostOfficeSender implements Runnable {
 	 */
 	public void send(NachosMessage message){
 		sendLock.acquire();
-		SocketKey key = new SocketKey(message).reverse();
+        Lib.assertTrue(
+                Machine.networkLink().getLinkAddress() != message.getDestHost(),
+                "Trying talk to yourself, huh?!" +
+                        "\nMyHost="+Machine.networkLink().getLinkAddress() +
+                        "\nDestHost="+message.getDestHost() +
+                        "\nMSG="+message);
+		SocketKey key = new SocketKey(message);
+        Lib.debug('n', "\n\nSEND:MSG="+message+"\nKEY="+key);
         if (stopInEffect.containsKey(key)) {
+            Lib.debug('n', "\n\nSTOP-SEND:MSG="+message+"\nKEY="+key);
             sendLock.release();
             return;
         }
@@ -139,6 +149,7 @@ public class PostOfficeSender implements Runnable {
 			for (int i=0; i< messages.size(); i++){
 				NachosMessage message = messages.get(i);
 				if (unackedBufferIndicator.get(key).get(i).equals(Acked.NO)){
+                    Lib.debug('n', "RESUBMIT: "+message);
 					postOffice.send(message);
 				}
 
@@ -158,8 +169,15 @@ public class PostOfficeSender implements Runnable {
 	 */
 	public void ackMessage(NachosMessage triggerMessage){
 		sendLock.acquire();
-		SocketKey key = new SocketKey(triggerMessage,true); // .reverse();
+        Lib.assertTrue(
+                Machine.networkLink().getLinkAddress() == triggerMessage.getDestHost(),
+                "Why are you sending me someone else's messages?");
+        /// we have to reverse this because
+        /// we constructed the key based on the OUTGOING tuple
+		SocketKey key = new SocketKey(triggerMessage).reverse();
         if (! unackedBuffer.containsKey(key)) {
+            System.err.println(
+                    "\n\nERROR:UNABLE to ACK a Message I don't own: "+triggerMessage);
             sendLock.release();
             return;
         }
