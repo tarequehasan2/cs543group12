@@ -178,7 +178,10 @@ public class MessageDispatcher {
         lck.release();
         // we should have come out of this sleep
         // with the socket EST and ready to go
-        Lib.assertTrue(getSocketState(key) == SocketState.ESTABLISHED);
+        SocketState newState = getSocketState(key);
+        Lib.assertTrue(newState  == SocketState.ESTABLISHED,
+                "Was not EST when our Condition released: "+newState
+                +"\nSTATES="+_states);
         return key;
     }
 
