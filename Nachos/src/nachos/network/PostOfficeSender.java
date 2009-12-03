@@ -190,7 +190,7 @@ public class PostOfficeSender implements Runnable {
 
 		//slide window if necessary to allow more messages to flow.
 
-		while (ackeds.isEmpty() && ackeds.getFirst().equals(Acked.YES)) {
+		while (!ackeds.isEmpty() && ackeds.getFirst().equals(Acked.YES)) {
 			ackeds.removeFirst();
 			unackedBuffer.get(key).removeFirst();
 		}
