@@ -28,7 +28,9 @@ vm =		VMKernel VMProcess Algorithm ClockAlgorithm CoreMap \
 		IMachine InvertedPageTable InvertedPageTableTest LiveMachine MockMachine \
 		ProcessorUtil RandomAlgorithm SwapAwareTranslationEntry SwapFile SwapFileTest	
 
-network = 	NetKernel NetProcess PostOffice MailMessage
+network = 	MessageDispatcher NachosMessage NachosMessageTest NetKernel \
+		NetKernelTest NetProcess PostOffice PostOfficeSender SocketEvent \
+		SocketKey SocketOpenFile SocketState TimerEventHandler
 
 ALLDIRS = machine security ag threads userprog vm network
 
