@@ -45,13 +45,13 @@ public class MessageDispatcher {
         final SocketEvent evt = SocketEvent.getEvent(msg);
         final SocketKey key = new SocketKey(msg);
         final SocketState sockState = getSocketState(key);
-        debug("dispatch:\nMSG="+msg+"\nKEY="+key+"\nEVT="+evt+"\nSTAT="+sockState);
+        debug("\n\nRECEIVE:\nMSG="+msg+"\nKEY="+key+"\nEVT="+evt+"\nSTAT="+sockState);
         if (SocketEvent.DATA == evt) {
             if (sockState != SocketState.ESTABLISHED) {
                 debug("DROPPING new DATA due to not in ESTABLISHED condition");
                 return;
             }
-            if (addToQueue(msg)) {
+            if (addToQueue(key, msg)) {
                 try {
                     _sender.send( NachosMessage.ack(msg) );
                 } catch (MalformedPacketException e) {
@@ -78,7 +78,7 @@ public class MessageDispatcher {
                 return;
             }
             // hang on to this, because we're going to have to SYN/ACK it
-            Lib.assertTrue(addToQueue(msg), "Full buffer for a SYN packet?!");
+            Lib.assertTrue(addToQueue(key, msg), "Full buffer for a SYN packet?!");
             // notify the accept() it can proceed now
             setSocketState(key, SocketState.SYN_RCVD);
         } else if (SocketEvent.SYNACK == evt) {
@@ -92,7 +92,9 @@ public class MessageDispatcher {
             // the flow of data will be their ACK
             Lib.assertTrue(SocketState.SYN_SENT ==
                     sockState,
-                    "Protocol Error; expected SYN_SENT for SYNACK");
+                    "Protocol Error; expected SYN_SENT for SYNACK" +
+                            "\nfound KEY="+key+"/STAT="+sockState
+                        +"\nSTATES="+_states);
             Condition cond = _connectConds.get(key);
             Lock lck = _condLocks.get(cond);
             lck.acquire();
@@ -131,12 +133,12 @@ public class MessageDispatcher {
     }
 
     public SocketKey accept(int port) {
-        SocketKey result;
+        // we have to look it up by wildcard because we don't know the whole tuple
         SocketKey key = getSynLocalPortSocketKey(port);
+        debug("ACCEPT-KEY="+key);
         final NachosMessage synMsg = _queues.get(key).remove(0);
         Lib.assertTrue(synMsg.isSYN(),
                 "Egad, how did you get accept() without a SYN message?");
-        result = new SocketKey(synMsg);
         try {
             _sender.send(NachosMessage.ackSyn(synMsg));
         } catch (MalformedPacketException e) {
@@ -144,7 +146,7 @@ public class MessageDispatcher {
             Lib.assertNotReached(e.getMessage());
         }
         setSocketState(key, SocketState.ESTABLISHED);
-        return result;
+        return key;
     }
 
     public SocketKey connect(int host, int port) {
@@ -155,6 +157,7 @@ public class MessageDispatcher {
         }
         int localHost = Machine.networkLink().getLinkAddress();
         SocketKey key = new SocketKey(host, port, localHost, localPort);
+        debug("SYN-KEY="+key);
         try {
             _sender.send(NachosMessage.syn(host, port, localHost, localPort));
         } catch (MalformedPacketException e) {
@@ -180,6 +183,7 @@ public class MessageDispatcher {
     }
 
     private int findLocalPort() {
+        int result = -1;
         for (int i = 0; i < NachosMessage.PORT_LIMIT; i++) {
             boolean used = false;
             for (SocketKey key : _states.keySet()) {
@@ -189,10 +193,11 @@ public class MessageDispatcher {
                 }
             }
             if (!used) {
-                return i;
+                result = i;
+                break;
             }
         }
-        return -1;
+        return result;
     }
 
     /**
@@ -204,6 +209,11 @@ public class MessageDispatcher {
         }
         final List<NachosMessage> receiveQ = _queues.get(key);
         if (receiveQ.isEmpty()) {
+            return null;
+        }
+        // Hide non-data messages,
+        // or it's possible read() might eat a control message
+        if (! receiveQ.get(0).isData()) {
             return null;
         }
         return receiveQ.remove(0);
@@ -221,12 +231,14 @@ public class MessageDispatcher {
     }
 
     public void close(SocketKey key) {
+        final int destHost = key.getSourceHost();
+        final int destPort = key.getSourcePort();
+        final int srcHost = key.getDestHost();
+        final int srcPort = key.getDestPort();
         if (_sender.isQueueEmpty(key)) {
             // woo-hoo, we can just switch them off
             try {
-                _sender.send(NachosMessage.fin(
-                        key.getDestHost(), key.getDestPort(),
-                        key.getSourceHost(), key.getSourcePort()));
+                _sender.send(NachosMessage.fin(destHost, destPort, srcHost, srcPort));
             } catch (MalformedPacketException e) {
                 e.printStackTrace(System.err);
                 Lib.assertNotReached(e.getMessage());
@@ -236,9 +248,7 @@ public class MessageDispatcher {
             // drat, we have to request them to not send US anything,
             // but we still have data to send them
             try {
-                _sender.send(NachosMessage.stp(
-                        key.getDestHost(), key.getDestPort(),
-                        key.getSourceHost(), key.getSourcePort()));
+                _sender.send(NachosMessage.stp(destHost, destPort, srcHost, srcPort));
             } catch (MalformedPacketException e) {
                 e.printStackTrace(System.err);
                 Lib.assertNotReached(e.getMessage());
@@ -254,8 +264,7 @@ public class MessageDispatcher {
     }
 
     private SocketState getSocketState(SocketKey key) {
-//    SocketKey key = newLocalPortSocketKey(port);
-        if (!_states.containsKey(key)) {
+        if (! _states.containsKey(key)) {
             // if its the first we've heard of it, then its closed
             _states.put(key, SocketState.CLOSED);
         }
@@ -270,8 +279,7 @@ public class MessageDispatcher {
      * @return true iff the receive buffer has sufficient space for your
      *         message.
      */
-    private boolean addToQueue(NachosMessage msg) {
-        SocketKey key = new SocketKey(msg);
+    private boolean addToQueue(SocketKey key, NachosMessage msg) {
         if (!_queues.containsKey(key)) {
             _queues.put(key, new ArrayList<NachosMessage>());
         }
@@ -287,6 +295,19 @@ public class MessageDispatcher {
         _states.put(key, state);
     }
 
+    /**
+     * This is called from the Timer to clean up cases where
+     * we didn't receive the FINACK.
+     */
+    public void clearClosingStates() {
+        for (SocketKey key : _states.keySet()) {
+            if (SocketState.CLOSING == getSocketState(key)) {
+                debug("Clearing state CLOSING "+key);
+                setSocketState(key, SocketState.CLOSED);
+            }
+        }
+    }
+
     private void clearSocketState(SocketKey key) {
         _states.remove(key);
     }
@@ -298,13 +319,16 @@ public class MessageDispatcher {
      * @return the SocketKey which describes the endpoint for that port.
      */
     private SocketKey getSynLocalPortSocketKey(int port) {
+        SocketKey result = null;
         for (SocketKey key : _states.keySet()) {
-            if (key.getDestPort() == port &&
+            if (key.getDestHost() == Machine.networkLink().getLinkAddress() &&
+                key.getDestPort() == port &&
                     SocketState.SYN_RCVD == _states.get(key)) {
-                return key;
+                result = key;
+                break;
             }
         }
-        return null;
+        return result;
     }
 
     private void error(String msg) {

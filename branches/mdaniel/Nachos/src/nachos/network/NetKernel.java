@@ -31,7 +31,7 @@ public class NetKernel extends VMKernel
         dispatcher = new MessageDispatcher(/* post, */ postOfficeSender);
         new KThread(postOfficeSender)
                 .setName("PostOfficeSender").fork();
-        new KThread(new TimerEventHandler(postOfficeSender))
+        new KThread(new TimerEventHandler(postOfficeSender, dispatcher))
                 .setName("TimerEvent").fork();
     }
 
@@ -97,7 +97,6 @@ public class NetKernel extends VMKernel
         if (! dispatcher.isInSynReceivedState(port)) {
             return null;
         }
-        debug("WooHoo SYN on "+port);
         return dispatcher.accept(port);
     }
 
@@ -143,12 +142,13 @@ public class NetKernel extends VMKernel
 
     public int write(SocketKey key,
                       byte[] data, int offset, int len) {
+        key = key.reverse();
         final int destHost = key.getDestHost();
         final int destPort = key.getDestPort();
         final int srcPort = key.getSourcePort();
         final int srcHost = key.getSourceHost();
-        final String qualifier = "(" + destHost + "," + destPort
-                + "," + srcHost + "," + srcPort + ")";
+        final String qualifier = "D(" + destHost + "," + destPort
+                + "),S(" + srcHost + "," + srcPort + ")";
         // compose up to NachosMessage.MAX_CONTENTS_LENGTH chunk, and tack it
         // into the outgoing queue for the given (host,port) tuple
         final int realLen = len - offset;
