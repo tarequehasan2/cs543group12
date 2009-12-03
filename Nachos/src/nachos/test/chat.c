@@ -55,8 +55,9 @@ int main(int argc, char* argv[])
   out_pos = 0;
 
   do {
-    bytesRead = read(sock, in_buffer + in_pos, 1);
-    if (-1 != bytesRead) {
+    while (-1 != (
+    bytesRead = read(sock, in_buffer + in_pos, 1)
+    )) {
       /* process chatserver input */
       in_pos++;
       if ('\n' == in_buffer[in_pos - 1]) {
@@ -69,8 +70,9 @@ int main(int argc, char* argv[])
       }
     }
 
-    bytesRead = read(stdin, out_buffer + out_pos, 1);
-    if (-1 != bytesRead) {
+    while (-1 != (
+    bytesRead = read(stdin, out_buffer + out_pos, 1)
+    )) {
       /* user said something */
       out_pos++;
       /* check for user exit */
