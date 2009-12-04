@@ -115,10 +115,11 @@ public class MessageDispatcher {
             Condition cond = _connectConds.get(key);
             Lock lck = _condLocks.get(cond);
             lck.acquire();
+            // ensure we set this before releasing the connect()
+            setSocketState(key, SocketState.ESTABLISHED);
             // notify the connect() that her SYN/ACK arrived; proceed!
             cond.wake();
             lck.release();
-            setSocketState(key, SocketState.ESTABLISHED);
         } else if (SocketEvent.ACK == evt) {
             _sender.ackMessage(msg);
         } else if (SocketEvent.STP == evt) {
