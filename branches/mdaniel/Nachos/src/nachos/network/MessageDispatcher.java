@@ -46,9 +46,17 @@ public class MessageDispatcher {
         final SocketKey key = new SocketKey(msg);
         final SocketState sockState = getSocketState(key);
         final int mySeq = msg.getSequence();
-        if (SequenceUtil.hasReceivedAMessage(key)) {
+        if (!msg.isACK() && SequenceUtil.hasReceivedAMessage(key)) {
             final int minimumSeq = SequenceUtil.getRecvSequence(key);
-            if (mySeq < minimumSeq) {
+            if (mySeq <= minimumSeq) {
+                // okay, maybe it is stale, but it could be because the client
+                // never heard our ACK; we'll just re-ACK it
+                try {
+                    _sender.send( NachosMessage.ack(msg) );
+                } catch (MalformedPacketException e) {
+                    e.printStackTrace(System.err);
+                    Lib.assertNotReached(e.getMessage());
+                }
                 error("DROPPING stale Message\n\tMSG="+msg+"\n\tSEQ="+mySeq+", RCVD_SEQ="+minimumSeq);
             }
         }
