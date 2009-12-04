@@ -1,28 +1,25 @@
 #include "stdio.h"
 
 #define CHAT_PORT 15
-#define FGETC_ERRNO -2
 
 #ifndef EXIT_FAILURE
 #define EXIT_FAILURE 1
 #endif/*EXIT_FAILURE*/
 
-static char buffer[80];
+static char buffer[128];
 static int  buf_len;
-static FILE client_sockets[80];
+static FILE client_sockets[128];
 static int  numClients;
 
 /*
  * Implements the getchar function except without blocking.
- * @return the read character, -1 if no character is available, 
- * or FGETC_ERRNO on error.
+ * @return the read character, -1 if no character is available, or -1 on error.
  */
 int non_blocking_getchar();
 /*
  * Implements the fgetc function except without blocking.
  * @param fd the file descriptor from which to read.
- * @return the read character, -1 if no character is available,
- * or FGETC_ERRNO on error.
+ * @return the read character, -1 if no character is available, or -1 on error.
  */
 int non_blocking_fgetc(FILE fd);
 /*
