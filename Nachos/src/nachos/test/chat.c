@@ -30,15 +30,8 @@ int main(int argc, char* argv[])
   int bytesRead;
 
   if (1 == argc) {
-/* this is a hack to allow us to run it from the -x with Nachos */
-    const char *cp;
-    cp = argv[0];
-    cp += 5; /* c h a t - */
-   host = atoi(cp);
-/*
     printf("Usage: %s server-link-address\n", argv[0]);
     return EXIT_FAILURE;
-*/
   } else {
     host = atoi(argv[1]);
   }
