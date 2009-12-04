@@ -1,6 +1,5 @@
 package nachos.network;
 
-import nachos.machine.Machine;
 import nachos.machine.OpenFile;
 
 public class SocketOpenFile extends OpenFile
@@ -8,6 +7,8 @@ public class SocketOpenFile extends OpenFile
     public SocketOpenFile(SocketKey key) {
         super();
         _key = key;
+        // only NetProcess calls this, so we know we're in the currentProcess
+        _pid = NetKernel.currentProcess().getPid();
         _kernel = (NetKernel) NetKernel.kernel;
     }
 
@@ -82,11 +83,17 @@ public class SocketOpenFile extends OpenFile
         return _key;
     }
 
+    @Override
+    public String toString() {
+        return "SocketOpenFile("+_key+")[pid="+_pid+"]";
+    }
+
     /**
      * Contains the remote host and port, along with the local address pair
      * for this Socket.
      */
     private SocketKey _key;
+    private int _pid;
     /** Convenience variable for accessing the O.S.&nbsp;kernel. */
     NetKernel _kernel;
 }
