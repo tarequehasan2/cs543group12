@@ -48,6 +48,9 @@ public class NetProcess extends VMProcess {
 
     protected int handleAccept(int port) {
         debug("ACCEPT("+port+")");
+        if (port < 0 || port > NachosMessage.PORT_LIMIT) {
+            return -1;
+        }
         SocketKey key = _kernel.accept(port);
         if (null == key) {
             return -1;
@@ -57,6 +60,12 @@ public class NetProcess extends VMProcess {
 
     protected int handleConnect(int host, int port) {
         debug("CONNECT("+host+","+port+")");
+        if (host < 0 || host > Byte.MAX_VALUE) {
+            return -1;
+        }
+        if (port < 0 || port > NachosMessage.PORT_LIMIT) {
+            return -1;
+        }
         SocketKey key = _kernel.connect(host, port);
         if (null == key) {
             error("Connect didn't return an ACK");
