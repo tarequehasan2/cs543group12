@@ -20,6 +20,7 @@ public class MessageDispatcher {
         _queues = new HashMap<SocketKey, List<NachosMessage>>();
         _condLocks = new HashMap<Condition, Lock>();
         _connectConds = new HashMap<SocketKey, Condition>();
+        _lastSequence = new HashMap<SocketKey, Integer>();
     }
 
     /**
@@ -44,15 +45,22 @@ public class MessageDispatcher {
         final SocketEvent evt = SocketEvent.getEvent(msg);
         final SocketKey key = new SocketKey(msg);
         final SocketState sockState = getSocketState(key);
+        final Integer lastSequence = getLastSequence(key);
+        final Integer expectedSequence = lastSequence + 1;
         debug("[RECEIVE]\n\tMSG="+msg+"\n\tKEY="+key+"\n\tEVT="+evt+"\n\tSTAT="+sockState);
         if (SocketEvent.DATA == evt) {
             if (sockState != SocketState.ESTABLISHED) {
                 debug("DROPPING new DATA due to not in ESTABLISHED condition");
                 return;
             }
+            if (!Integer.valueOf(msg.getSequence()).equals(expectedSequence) && !(expectedSequence.equals(0))) {
+                debug("DROPPING new DATA because sequence "+msg.getSequence()+" found when expecting sequence "+expectedSequence);
+                return;
+            }
             if (addToQueue(key, msg)) {
                 try {
                     _sender.send( NachosMessage.ack(msg) );
+                    updateSequence(key, msg.getSequence());
                 } catch (MalformedPacketException e) {
                     e.printStackTrace(System.err);
                     Lib.assertNotReached(e.getMessage());
@@ -278,7 +286,19 @@ public class MessageDispatcher {
         }
         return _states.get(key);
     }
+    
+    private Integer getLastSequence(SocketKey key){
+    	if (!_lastSequence.containsKey(key)){
+    		_lastSequence.put(key, -1);
+    	}
+    	return _lastSequence.get(key);
+    }
 
+    private void updateSequence(SocketKey key, Integer seq){
+    	_lastSequence.put(key, seq);   	
+    }
+
+    
     /**
      * Adds the specified NachosMessage to its correct receive queue, and
      * returns true iff I actually added your message.
@@ -363,6 +383,7 @@ public class MessageDispatcher {
      */
     private Map<SocketKey, Condition> _connectConds;
     private Map<SocketKey, SocketState> _states;
+    private Map<SocketKey, Integer> _lastSequence;
     /**
      * Maps between the connection descriptor to the NachosMessages waiting on
      * that socket endpoint. It may be a List, but we don't accept any more than
