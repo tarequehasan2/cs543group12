@@ -18,9 +18,9 @@ public class MessageDispatcher {
         _sender = sender;
         _states = new HashMap<SocketKey, SocketState>();
         _queues = new HashMap<SocketKey, List<NachosMessage>>();
+        _queueLock = new Lock();
         _condLocks = new HashMap<Condition, Lock>();
         _connectConds = new HashMap<SocketKey, Condition>();
-        _lastSequence = new HashMap<SocketKey, Integer>();
     }
 
     /**
@@ -45,22 +45,30 @@ public class MessageDispatcher {
         final SocketEvent evt = SocketEvent.getEvent(msg);
         final SocketKey key = new SocketKey(msg);
         final SocketState sockState = getSocketState(key);
-        final Integer lastSequence = getLastSequence(key);
-        final Integer expectedSequence = lastSequence + 1;
+        final int mySeq = msg.getSequence();
+        if (SequenceUtil.hasReceivedAMessage(key)) {
+            final int minimumSeq = SequenceUtil.getRecvSequence(key);
+            if (mySeq < minimumSeq) {
+                error("DROPPING stale Message\n\tMSG="+msg+"\n\tSEQ="+mySeq+", RCVD_SEQ="+minimumSeq);
+            }
+        }
+        /// don't do this, otherwise we can't deal with out-of-order messages
+//        if (SequenceUtil.hasSentAMessage(key)) {
+//            final int maximumSeq = SequenceUtil.getSentSequence(key) + 1;
+//            if (mySeq > maximumSeq) {
+//                error("DROPPING psychic Message\n\tMSG="+msg+"\n\tSEQ="+mySeq+", SENT_SEQ="+maximumSeq);
+//            }
+//        }
+        SequenceUtil.receivedSequence(key, mySeq);
         debug("[RECEIVE]\n\tMSG="+msg+"\n\tKEY="+key+"\n\tEVT="+evt+"\n\tSTAT="+sockState);
         if (SocketEvent.DATA == evt) {
             if (sockState != SocketState.ESTABLISHED) {
                 debug("DROPPING new DATA due to not in ESTABLISHED condition");
                 return;
             }
-            if (!Integer.valueOf(msg.getSequence()).equals(expectedSequence) && !(expectedSequence.equals(0))) {
-                debug("DROPPING new DATA because sequence "+msg.getSequence()+" found when expecting sequence "+expectedSequence);
-                return;
-            }
             if (addToQueue(key, msg)) {
                 try {
                     _sender.send( NachosMessage.ack(msg) );
-                    updateSequence(key, msg.getSequence());
                 } catch (MalformedPacketException e) {
                     e.printStackTrace(System.err);
                     Lib.assertNotReached(e.getMessage());
@@ -145,9 +153,11 @@ public class MessageDispatcher {
         // we have to look it up by wildcard because we don't know the whole tuple
         SocketKey key = getSynLocalPortSocketKey(port);
         debug("ACCEPT-KEY="+key);
-        final NachosMessage synMsg = _queues.get(key).remove(0);
-        Lib.assertTrue(synMsg.isSYN(),
+        final NachosMessage synMsg = getSynFromQueue(key);
+        Lib.assertTrue(null != synMsg,
                 "Egad, how did you get accept() without a SYN message?");
+        Lib.assertTrue(synMsg.isSYN(),
+                "Egad, I gave you a non-SYN message?!");
         try {
             _sender.send(NachosMessage.ackSyn(synMsg));
         } catch (MalformedPacketException e) {
@@ -213,22 +223,58 @@ public class MessageDispatcher {
     }
 
     /**
+     * Gets the next DATA message from the receive queue for the provided
+     * socket descriptor. Be aware that there may <em>be</em> data messages
+     * in your receive queue, but if they are not the expected sequence,
+     * you'll still get null until the missing Message arrives.
+     * @param key the socket descriptor
+     * @return the next available DATA message, or null if none exists.
      * @see #pushBack(NachosMessage, int)
      */
     public NachosMessage nextData(SocketKey key) {
+        _queueLock.acquire();
         if (! _queues.containsKey(key)) {
+            _queueLock.release();
             return null;
         }
+
         final List<NachosMessage> receiveQ = _queues.get(key);
         if (receiveQ.isEmpty()) {
+            _queueLock.release();
             return null;
         }
+
+//        final int currentSeq = SequenceUtil.querySequence(key);
+//        if (-1 == currentSeq) {
+//            _queueLock.release();
+//            return null;
+//        }
+
+//        final int expectedSeq = currentSeq + 1;
+        NachosMessage result = null;
+        final int qLen = receiveQ.size();
+
         // Hide non-data messages,
         // or it's possible read() might eat a control message
-        if (! receiveQ.get(0).isData()) {
-            return null;
+        for (int i = 0; i < qLen; i++) {
+            NachosMessage msg = receiveQ.get(i);
+            if (! msg.isData()) {
+                continue;
+            }
+//            final int seq = msg.getSequence();
+//            Lib.assertTrue(seq >= expectedSeq,
+//                    "Egad, a dupe got into the receive queue at "+i+":" +
+//                            "MSG="+msg+"\nSEQ="+expectedSeq);
+//            if (seq == expectedSeq) {
+                result = receiveQ.remove(i);
+                break;
+//            }
         }
-        return receiveQ.remove(0);
+//        if (null == result) {
+//            error("nextData:currentSeq="+currentSeq+";expectedSeq="+expectedSeq+";Q="+receiveQ);
+//        }
+        _queueLock.release();
+        return result;
     }
 
     /**
@@ -238,8 +284,10 @@ public class MessageDispatcher {
      * @param bytes the number of bytes <u>unread</u> from that message.
      */
     public void pushBack(NachosMessage msg, int bytes) {
+        _queueLock.acquire();
         _queues.get(new SocketKey(msg))
                 .add(0, NachosMessage.shorten(msg, bytes));
+        _queueLock.release();
     }
 
     public void close(SocketKey key) {
@@ -274,9 +322,38 @@ public class MessageDispatcher {
         }
     }
 
+    /**
+     * Returns true iff there is a SYN message addressed to the specified
+     * local port.
+     * @param port the local port to check
+     * @return true if that local port is in SYN_RCVD state.
+     */
     public boolean isInSynReceivedState(int port) {
         final SocketKey key = getSynLocalPortSocketKey(port);
         return null != key;
+    }
+
+    /**
+     * Extracts the SYN Message from the receive queue. It <b>better</b> be
+     * the first Message in the designated queue.
+     * @param key the socket descriptor who's SYN we're looking for.
+     * @return the SYN message or null if none exists.
+     */
+    private NachosMessage getSynFromQueue(SocketKey key) {
+        _queueLock.acquire();
+        NachosMessage result;
+        if (! _queues.containsKey(key)) {
+            _queueLock.release();
+            return null;
+        }
+        final List<NachosMessage> list = _queues.get(key);
+        if (list.isEmpty()) {
+            result = null;
+        } else {
+            result = list.remove(0);
+        }
+        _queueLock.release();
+        return result;
     }
 
     private SocketState getSocketState(SocketKey key) {
@@ -286,19 +363,7 @@ public class MessageDispatcher {
         }
         return _states.get(key);
     }
-    
-    private Integer getLastSequence(SocketKey key){
-    	if (!_lastSequence.containsKey(key)){
-    		_lastSequence.put(key, -1);
-    	}
-    	return _lastSequence.get(key);
-    }
 
-    private void updateSequence(SocketKey key, Integer seq){
-    	_lastSequence.put(key, seq);   	
-    }
-
-    
     /**
      * Adds the specified NachosMessage to its correct receive queue, and
      * returns true iff I actually added your message.
@@ -308,14 +373,17 @@ public class MessageDispatcher {
      *         message.
      */
     private boolean addToQueue(SocketKey key, NachosMessage msg) {
+        _queueLock.acquire();
         if (!_queues.containsKey(key)) {
             _queues.put(key, new ArrayList<NachosMessage>());
         }
         final List<NachosMessage> list = _queues.get(key);
         if (list.size() >= RECV_WINDOW) {
+            _queueLock.release();
             return false;
         }
         list.add(msg);
+        _queueLock.release();
         return true;
     }
 
@@ -383,7 +451,7 @@ public class MessageDispatcher {
      */
     private Map<SocketKey, Condition> _connectConds;
     private Map<SocketKey, SocketState> _states;
-    private Map<SocketKey, Integer> _lastSequence;
+    private Lock _queueLock;
     /**
      * Maps between the connection descriptor to the NachosMessages waiting on
      * that socket endpoint. It may be a List, but we don't accept any more than
